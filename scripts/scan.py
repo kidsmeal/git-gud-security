@@ -43,6 +43,8 @@ SKIP_EXTS = {
 }
 
 MAX_FILE_BYTES = 2_000_000  # skip files larger than 2MB for content scanning
+MAX_LINE_LEN = 5_000  # cap the slice of any one line we match, so a minified/one-line blob in a
+# hostile repo can't drive catastrophic regex backtracking and hang the scan
 
 
 def load_patterns():
@@ -97,6 +99,25 @@ def redact(s):
     return s[:6] + "***" + s[-3:]
 
 
+# High-precision secret formats scrubbed from EVERY emitted snippet, whatever pattern matched.
+# Without this, a real secret sitting on a line that matched a non-secret pattern (a JWT inside a
+# localStorage.setItem, say) would be printed verbatim into stdout and SECURITY_AUDIT.md.
+_SECRET_RE = re.compile(
+    r"sk-ant-[A-Za-z0-9_-]{20,}|sk-proj-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{32,}"
+    r"|AKIA[0-9A-Z]{16}|gh[opsur]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{20,}"
+    r"|glpat-[A-Za-z0-9_-]{20,}|xox[baprs]-[0-9A-Za-z-]{10,}|AIza[0-9A-Za-z_-]{35}"
+    r"|sk_live_[0-9A-Za-z]{20,}|rk_live_[0-9A-Za-z]{20,}|shpat_[a-fA-F0-9]{32}"
+    r"|eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}"
+    r"|[a-zA-Z][a-zA-Z0-9+.-]*://[^:@/\s\"']+:[^@/\s\"']+@",
+    re.IGNORECASE,
+)
+
+
+def scrub(s):
+    """Redact any secret-format substring anywhere in a snippet, regardless of pattern."""
+    return _SECRET_RE.sub(lambda m: redact(m.group(0)), s)
+
+
 def iter_files(root):
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
@@ -134,6 +155,8 @@ def scan_content(root, patterns, do_redact):
         files_scanned += 1
         for pat in applicable:
             for i, line in enumerate(lines, 1):
+                if len(line) > MAX_LINE_LEN:
+                    line = line[:MAX_LINE_LEN]
                 hit = None
                 for rx in pat["_any"]:
                     m = rx.search(line)
@@ -147,6 +170,8 @@ def scan_content(root, patterns, do_redact):
                 snippet = line.rstrip()[:200]
                 if pat.get("secret") and do_redact:
                     snippet = snippet.replace(hit.group(0), redact(hit.group(0)))
+                if do_redact:
+                    snippet = scrub(snippet)
                 findings.append({
                     "id": pat["id"],
                     "category": pat.get("category", ""),
