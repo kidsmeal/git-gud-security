@@ -5,12 +5,12 @@ service_role key in the frontend, RLS left off "for dev", a committed `.env` wit
 MCP tool that runs `exec()` on a model-supplied string, a hook that POSTs your env to a remote.
 
 It runs as a [Claude Code](https://claude.com/claude-code) skill. It covers normal app security
-(Supabase, Cloudflare, Next, Expo, and friends) and the newer class of holes in things built with
-Claude itself: skills, plugins, MCP servers, agents, slash commands, hooks.
+(Supabase, Cloudflare, Next, Expo) and the newer class of holes in things built with Claude
+itself: skills, plugins, MCP servers, agents, slash commands, hooks.
 
-The feedback is terse and cited. Every finding names a real hole at a real `file:line` with a
-one-line fix, or it names what the current mode could not check yet. No flattery, no padding, a
-letter grade up top so the verdict lands.
+The feedback is terse and cited. Every finding points to a real hole at a `file:line` with a
+one-line fix, or says what the current mode couldn't check yet. The report leads with a letter
+grade.
 
 ## Modes
 
@@ -87,10 +87,10 @@ workflow that powers `ultra` mode.
 
 ## Limitations
 
-This is a best-effort assistive tool, not a guarantee. Treat findings as leads, not as a substitute
-for human review, a real SAST/DAST pass, dependency scanning, or a pen test. It can miss holes and
-it can produce false positives, which is why `quick`/`full` confirm at the source line before
-reporting and `ultra` runs a refutation panel. No warranty.
+This is a best-effort assistant, not a guarantee. Treat its findings as leads to confirm. They
+don't replace human review, a real SAST/DAST pass, dependency scanning, or a pen test. It misses
+things and it flags false positives, which is why `quick` and `full` confirm at the source line
+before reporting and `ultra` runs a refutation panel. It comes with no warranty.
 
 ## License
 
