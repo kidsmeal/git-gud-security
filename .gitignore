@@ -1,0 +1,22 @@
+# Scanner output (written into whatever repo you scan; don't commit it here)
+SECURITY_AUDIT.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Local test fixtures / scratch
+_ggs_fix*/
+*.tmp
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Claude Code local settings
+.claude/settings.local.json

@@ -1,0 +1,635 @@
+{
+  "_comment": "Deterministic pattern library for Git Gud Security scan.py. grep/config tier only. IDs match references/checks.md. Each finding is a CANDIDATE the skill confirms at file:line before reporting. 'any' = report if any regex matches a line (case-insensitive). 'not' = suppress that line if it also matches. 'secret':true redacts the match in output. kind 'filename' flags a file's presence.",
+  "secret_redaction": true,
+  "patterns": [
+    {
+      "id": "hardcoded-api-key-literal",
+      "category": "secrets",
+      "severity": "critical",
+      "title": "Hardcoded API key / token in source",
+      "detectability": "grep",
+      "secret": true,
+      "include": ["*"],
+      "exclude": [".md", ".mdx", ".txt"],
+      "any": [
+        "sk-ant-[A-Za-z0-9_-]{20,}",
+        "sk-proj-[A-Za-z0-9_-]{20,}",
+        "sk-[A-Za-z0-9]{32,}",
+        "AKIA[0-9A-Z]{16}",
+        "ghp_[A-Za-z0-9]{30,}",
+        "gh[ousr]_[A-Za-z0-9]{30,}",
+        "github_pat_[A-Za-z0-9_]{20,}",
+        "glpat-[A-Za-z0-9_-]{20,}",
+        "xox[baprs]-[0-9A-Za-z-]{10,}",
+        "AIza[0-9A-Za-z_-]{35}",
+        "sk_live_[0-9A-Za-z]{20,}",
+        "rk_live_[0-9A-Za-z]{20,}",
+        "SG\\.[A-Za-z0-9_-]{22}\\.[A-Za-z0-9_-]{43}",
+        "AC[a-z0-9]{32}",
+        "dop_v1_[a-f0-9]{64}",
+        "shpat_[a-fA-F0-9]{32}"
+      ],
+      "fix": "Pull every credential from an env var or secret manager at runtime; remove the literal and rotate the leaked key."
+    },
+    {
+      "id": "private-key-block",
+      "category": "secrets",
+      "severity": "critical",
+      "title": "Private key embedded in source",
+      "detectability": "grep",
+      "secret": true,
+      "include": ["*"],
+      "any": ["-----BEGIN (RSA |EC |OPENSSH |DSA |PGP |ENCRYPTED )?PRIVATE KEY-----"],
+      "fix": "Never commit private keys. Remove, rotate, and load from a secret store or mounted file at runtime."
+    },
+    {
+      "id": "secret-behind-public-env-prefix",
+      "category": "secrets",
+      "severity": "critical",
+      "title": "Private secret wrapped in a client-exposed env prefix",
+      "detectability": "grep",
+      "include": ["*"],
+      "any": ["(NEXT_PUBLIC_|VITE_|EXPO_PUBLIC_|REACT_APP_|GATSBY_|NUXT_PUBLIC_|PUBLIC_)[A-Z0-9_]*(SERVICE_ROLE|SECRET|PRIVATE_KEY|ACCESS_KEY|PASSWORD|CLIENT_SECRET)"],
+      "fix": "Public-prefixed vars are inlined into the client bundle. Move the real secret to a non-prefixed server var and proxy the call through a server route."
+    },
+    {
+      "id": "service-role-key-in-client",
+      "category": "secrets",
+      "severity": "high",
+      "title": "Supabase service_role key referenced in app code",
+      "detectability": "grep",
+      "include": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte", ".astro"],
+      "any": ["SUPABASE_SERVICE_ROLE", "service_role[\"'`\\s]*key", "createClient\\([^)]*service", "supabaseAdmin", "createAdminClient"],
+      "fix": "service_role bypasses all RLS. Use the anon/publishable key client-side; keep service_role only in server routes / edge functions."
+    },
+    {
+      "id": "db-connection-string-with-password",
+      "category": "secrets",
+      "severity": "critical",
+      "title": "Database connection string with inline password",
+      "detectability": "grep",
+      "secret": true,
+      "include": ["*"],
+      "any": [
+        "(postgres|postgresql|mysql|mongodb)(\\+srv)?://[^:\\s\"'`]+:[^@\\s\"'`]+@",
+        "redis://[^:@\\s]*:[^@\\s\"'`]+@"
+      ],
+      "not": ["://[^:@]*:(password|pass|user|username|host|changeme|example|your)@", "127\\.0\\.0\\.1", "localhost"],
+      "fix": "Move connection strings to env/secret manager and rotate the password; never commit live DB creds."
+    },
+    {
+      "id": "generic-secret-assignment",
+      "category": "secrets",
+      "severity": "high",
+      "title": "Secret-looking literal assigned in source",
+      "detectability": "grep",
+      "secret": true,
+      "include": ["*"],
+      "exclude": [".md", ".mdx", ".txt", ".lock"],
+      "any": ["(api[_-]?key|secret|secret[_-]?key|auth[_-]?token|access[_-]?token|client[_-]?secret|jwt[_-]?secret|private[_-]?key|password|passwd)\\s*[:=]\\s*[\"'][^\"'\\s]{12,}[\"']"],
+      "not": ["process\\.env", "import\\.meta\\.env", "os\\.environ", "getenv", "your[_-]", "xxx", "<[a-z]", "example", "changeme", "placeholder", "redacted", "dummy", "\\$\\{", "\\*\\*\\*", "test[_-]?key", "fake"],
+      "fix": "Read it from an env var; if the value is real, rotate it. Confirm this isn't a placeholder before reporting."
+    },
+    {
+      "id": "jwt-signing-secret-exposed",
+      "category": "secrets",
+      "severity": "critical",
+      "title": "JWT signing secret hardcoded",
+      "detectability": "grep",
+      "secret": true,
+      "include": ["*"],
+      "any": ["(jwt[_-]?secret|jwt[_-]?signing[_-]?key|token[_-]?secret)\\s*[:=]\\s*[\"'][^\"'\\s]{6,}[\"']"],
+      "not": ["process\\.env", "import\\.meta\\.env", "os\\.environ", "getenv", "your", "example", "changeme", "\\$\\{"],
+      "fix": "Anyone with this secret can forge any token. Move to env/secret store and rotate; invalidate existing tokens."
+    },
+    {
+      "id": "private-key-file-committed",
+      "category": "secrets",
+      "severity": "critical",
+      "title": "Key / credential file committed to the repo",
+      "detectability": "config",
+      "kind": "filename",
+      "filenames": ["id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", ".netrc", ".pypirc", "credentials.json", "secrets.json", "secrets.yml", "secrets.yaml"],
+      "filename_regex": ["\\.pem$", "\\.key$", "\\.p12$", "\\.pfx$", "\\.keystore$", "\\.jks$", "service[-_]?account.*\\.json$", "\\.npmrc$"],
+      "filename_exclude": ["public", "example", "sample", ".pub"],
+      "fix": "Remove from the tree, add to .gitignore, rotate the credential, and purge from git history."
+    },
+    {
+      "id": "terraform-state-committed",
+      "category": "secrets",
+      "severity": "high",
+      "title": "Terraform state committed (often holds plaintext secrets)",
+      "detectability": "config",
+      "kind": "filename",
+      "filename_regex": ["\\.tfstate$", "\\.tfstate\\.backup$"],
+      "fix": "Never commit tfstate. Use a remote backend (S3+DynamoDB, TF Cloud), gitignore it, and rotate any secrets it exposed."
+    },
+    {
+      "id": "supabase-rls-disabled",
+      "category": "baas",
+      "severity": "critical",
+      "title": "RLS disabled on a table (public API fully open)",
+      "detectability": "config",
+      "include": [".sql"],
+      "any": ["disable\\s+row\\s+level\\s+security"],
+      "fix": "Enable RLS on every table exposed via the anon key and add an explicit owner-scoped policy."
+    },
+    {
+      "id": "supabase-rls-policy-using-true",
+      "category": "baas",
+      "severity": "high",
+      "title": "RLS policy with a permanently-true condition",
+      "detectability": "config",
+      "include": [".sql"],
+      "any": ["(using|with\\s+check)\\s*\\(\\s*true\\s*\\)"],
+      "fix": "A policy of using(true) is the same as no policy. Scope to auth.uid() = owner_id (or your tenant column)."
+    },
+    {
+      "id": "firebase-rules-open",
+      "category": "baas",
+      "severity": "critical",
+      "title": "Firebase security rule allows anyone to read/write",
+      "detectability": "config",
+      "include": [".rules", "firestore.rules", "storage.rules", "database.rules.json", "firebase.json"],
+      "any": ["allow\\s+(read|write|read,\\s*write)\\s*:\\s*if\\s+true", "\"\\.(read|write)\"\\s*:\\s*true", "allow\\s+(read|write)\\s*;"],
+      "fix": "Replace `if true` with `if request.auth != null && request.auth.uid == resource.data.ownerId` (scope to the owner)."
+    },
+    {
+      "id": "firebase-rules-test-mode",
+      "category": "baas",
+      "severity": "high",
+      "title": "Firebase test-mode rules shipped (time-bomb open access)",
+      "detectability": "config",
+      "include": [".rules", "firestore.rules"],
+      "any": ["request\\.time\\s*<\\s*timestamp\\.date\\("],
+      "fix": "Test-mode rules open the DB until a date then lock it. Replace with real auth/ownership rules before launch."
+    },
+    {
+      "id": "edge-function-no-auth",
+      "category": "baas",
+      "severity": "high",
+      "title": "Serverless / edge function with no auth check",
+      "detectability": "trace",
+      "include": [".ts", ".js"],
+      "any": ["verify_jwt\\s*=\\s*false", "--no-verify-jwt"],
+      "fix": "Require and verify the caller's JWT (or a service token) at the top of the function; don't trust the client."
+    },
+    {
+      "id": "eval-injection",
+      "category": "injection",
+      "severity": "high",
+      "title": "eval() of dynamic input",
+      "detectability": "grep",
+      "include": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".py", ".rb", ".php"],
+      "any": ["(?<![A-Za-z0-9_.])eval\\("],
+      "not": ["// ", "#", "literal_eval"],
+      "fix": "eval runs arbitrary code. Use JSON.parse for data, ast.literal_eval for Python literals, or a safe expression parser."
+    },
+    {
+      "id": "new-function-injection",
+      "category": "injection",
+      "severity": "high",
+      "title": "new Function() with dynamic body",
+      "detectability": "grep",
+      "include": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte"],
+      "any": ["new Function\\("],
+      "fix": "Interpolating untrusted strings into new Function() is code injection. Use a safe lookup/parser instead."
+    },
+    {
+      "id": "command-injection-exec",
+      "category": "injection",
+      "severity": "high",
+      "title": "Shell exec with interpolated input",
+      "detectability": "grep",
+      "include": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"],
+      "any": ["child_process\\.exec\\(", "(?<![A-Za-z0-9_.])execSync\\(", "exec\\(\\s*[`\"'][^`\"']*\\$\\{"],
+      "fix": "Use execFile/spawn with an argument array; never build a shell string from user input."
+    },
+    {
+      "id": "os-system-injection",
+      "category": "injection",
+      "severity": "high",
+      "title": "os.system / subprocess shell=True",
+      "detectability": "grep",
+      "include": [".py"],
+      "any": ["os\\.system\\(", "subprocess\\.(run|call|Popen|check_output|check_call)\\([^)]*shell\\s*=\\s*True"],
+      "fix": "Pass args as a list without shell=True so shell metacharacters can't be interpreted."
+    },
+    {
+      "id": "sql-string-built-query",
+      "category": "injection",
+      "severity": "high",
+      "title": "SQL built by string interpolation",
+      "detectability": "grep",
+      "include": [".js", ".jsx", ".ts", ".tsx", ".py", ".rb", ".php", ".go", ".java"],
+      "any": ["(SELECT|INSERT INTO|UPDATE|DELETE FROM)\\s+[^;`\"']*(\\$\\{|\"\\s*\\+|'\\s*\\+|%s|f\"|f')"],
+      "not": ["\\?", "\\$1", ":param", "prepared"],
+      "fix": "Use parameterized queries / bound params; never concatenate user input into SQL."
+    },
+    {
+      "id": "yaml-unsafe-load",
+      "category": "injection",
+      "severity": "high",
+      "title": "yaml.load without SafeLoader",
+      "detectability": "grep",
+      "include": [".py"],
+      "any": ["yaml\\.load\\(", "yaml\\.unsafe_load\\("],
+      "not": ["SafeLoader", "safe_load"],
+      "fix": "Use yaml.safe_load(); yaml.load() executes arbitrary Python via tags."
+    },
+    {
+      "id": "unsafe-deserialization",
+      "category": "injection",
+      "severity": "high",
+      "title": "Unsafe deserialization of untrusted data",
+      "detectability": "grep",
+      "include": [".py"],
+      "any": ["pickle\\.loads?\\(", "cPickle\\.loads?\\(", "(cloudpickle|dill|marshal)\\.loads?\\(", "yaml\\.full_load\\("],
+      "fix": "Prefer JSON / a schema-validated deserializer; never unpickle data from an untrusted source."
+    },
+    {
+      "id": "tls-verification-disabled",
+      "category": "injection",
+      "severity": "high",
+      "title": "TLS certificate verification disabled",
+      "detectability": "grep",
+      "include": ["*"],
+      "any": ["rejectUnauthorized\\s*:\\s*false", "verify\\s*=\\s*False", "InsecureSkipVerify\\s*:\\s*true", "NODE_TLS_REJECT_UNAUTHORIZED\\s*=\\s*[\"']?0", "ssl\\._create_unverified_context", "CURLOPT_SSL_VERIFYPEER.{0,8}(false|0)"],
+      "fix": "Don't disable TLS verification (enables MITM). Trust the proper CA instead."
+    },
+    {
+      "id": "react-dangerously-set-html",
+      "category": "injection",
+      "severity": "medium",
+      "title": "dangerouslySetInnerHTML / innerHTML XSS sink",
+      "detectability": "grep",
+      "include": [".js", ".jsx", ".ts", ".tsx", ".vue", ".svelte"],
+      "any": ["dangerouslySetInnerHTML", "\\.innerHTML\\s*=", "\\.outerHTML\\s*=", "insertAdjacentHTML\\(", "document\\.write\\("],
+      "fix": "Use textContent or sanitize with DOMPurify before inserting HTML."
+    },
+    {
+      "id": "ssti-template-render",
+      "category": "injection",
+      "severity": "high",
+      "title": "Server-side template rendered from user input",
+      "detectability": "grep",
+      "include": [".py", ".js", ".ts"],
+      "any": ["render_template_string\\(", "Template\\([^)]*\\+", "new Function\\([^)]*template"],
+      "fix": "Render fixed templates and pass user data as bound variables; never compile templates from user input."
+    },
+    {
+      "id": "jwt-decode-not-verified",
+      "category": "auth",
+      "severity": "high",
+      "title": "JWT decoded without verifying signature",
+      "detectability": "grep",
+      "include": [".js", ".jsx", ".ts", ".tsx", ".py"],
+      "any": ["jwt\\.decode\\([^)]*verify\\s*[:=]\\s*[Ff]alse", "jwtDecode\\(", "jwt_decode\\(", "decode\\([^)]*algorithms\\s*=\\s*\\[\\s*['\"]none"],
+      "fix": "Use jwt.verify with a fixed algorithm allowlist and the secret/public key; a decoded-but-unverified token is attacker-controlled."
+    },
+    {
+      "id": "jwt-alg-none",
+      "category": "auth",
+      "severity": "critical",
+      "title": "JWT alg 'none' or unrestricted algorithms accepted",
+      "detectability": "grep",
+      "include": [".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".rb"],
+      "any": ["alg(orithm)?[\"'`\\s:=]+none", "algorithms\\s*[:=]\\s*\\[[^\\]]*none"],
+      "fix": "Pin a single expected algorithm (e.g. RS256/HS256); reject 'none' and never let the token choose."
+    },
+    {
+      "id": "hardcoded-admin-check",
+      "category": "auth",
+      "severity": "high",
+      "title": "Admin / auth gate compared against a hardcoded value",
+      "detectability": "grep",
+      "include": ["*"],
+      "any": ["(admin|is_admin|role|password|api[_-]?key|token)\\s*===?\\s*[\"'][^\"']+[\"']", "x-admin[^\\n]{0,40}===?\\s*[\"']"],
+      "not": ["process\\.env", "import\\.meta\\.env", "os\\.environ", "getenv", "===\\s*['\"]admin['\"]\\s*\\?\\s*", "role\\s*===?\\s*['\"](user|guest|member)['\"]"],
+      "fix": "Verify auth against a server-side store with hashed comparison; don't gate on a guessable constant."
+    },
+    {
+      "id": "cors-wildcard-credentials",
+      "category": "web",
+      "severity": "high",
+      "title": "CORS allows any origin (with or without credentials)",
+      "detectability": "grep",
+      "include": ["*"],
+      "any": ["Access-Control-Allow-Origin[\"'`,:\\s]+\\*", "origin\\s*:\\s*true", "cors\\(\\s*\\)", "cors\\(\\{[^}]*origin\\s*:\\s*[\"'`]?\\*"],
+      "fix": "Echo an explicit allowlist of trusted origins; never combine `*` (or reflected origin) with credentials."
+    },
+    {
+      "id": "insecure-cookie-flags",
+      "category": "web",
+      "severity": "medium",
+      "title": "Session cookie missing HttpOnly / Secure",
+      "detectability": "grep",
+      "include": ["*"],
+      "any": ["httpOnly\\s*:\\s*false", "secure\\s*:\\s*false", "sameSite\\s*:\\s*['\"]?none['\"]?"],
+      "fix": "Set HttpOnly, Secure, and SameSite=Lax/Strict on auth/session cookies."
+    },
+    {
+      "id": "debug-mode-in-prod",
+      "category": "web",
+      "severity": "medium",
+      "title": "Debug mode enabled",
+      "detectability": "grep",
+      "include": [".py", ".js", ".ts", ".env"],
+      "any": ["DEBUG\\s*=\\s*True", "app\\.run\\([^)]*debug\\s*=\\s*True", "FLASK_DEBUG\\s*=\\s*1", "NODE_ENV\\s*=\\s*development"],
+      "fix": "Disable debug in production; debug pages leak stack traces, env, and sometimes a code-exec console."
+    },
+    {
+      "id": "exposed-source-maps",
+      "category": "web",
+      "severity": "low",
+      "title": "Source maps present in build output",
+      "detectability": "config",
+      "kind": "filename",
+      "filename_regex": ["\\.(js|css)\\.map$"],
+      "fix": "Don't ship .map files to production; they reverse your minified bundle (and sometimes leak comments/paths)."
+    },
+    {
+      "id": "actions-expression-injection",
+      "category": "cicd",
+      "severity": "critical",
+      "title": "Untrusted GitHub event field interpolated into run:",
+      "detectability": "config",
+      "include": [".yml", ".yaml"],
+      "any": ["\\$\\{\\{\\s*github\\.event\\.(issue|pull_request|comment|review|head_commit|commits|pages)[^}]*(title|body|message|name|email|ref|label)"],
+      "fix": "Pass the field through an env: var and reference $VAR in run:, never inline ${{ github.event... }}."
+    },
+    {
+      "id": "pull-request-target-checkout",
+      "category": "cicd",
+      "severity": "critical",
+      "title": "pull_request_target builds untrusted PR code",
+      "detectability": "config",
+      "include": [".yml", ".yaml"],
+      "any": ["pull_request_target"],
+      "fix": "pull_request_target runs with secrets. Don't checkout/build/run the PR head under it; split trusted/untrusted jobs."
+    },
+    {
+      "id": "github-token-write-all",
+      "category": "cicd",
+      "severity": "high",
+      "title": "Workflow grants write-all / broad token permissions",
+      "detectability": "config",
+      "include": [".yml", ".yaml"],
+      "any": ["permissions\\s*:\\s*write-all", "contents\\s*:\\s*write[^\\n]*\\n[^\\n]*id-token\\s*:\\s*write"],
+      "fix": "Set least-privilege `permissions:` per job; default to contents: read."
+    },
+    {
+      "id": "unpinned-github-action",
+      "category": "cicd",
+      "severity": "high",
+      "title": "Third-party GitHub Action pinned to a mutable ref",
+      "detectability": "config",
+      "include": [".yml", ".yaml"],
+      "any": ["uses:\\s*[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@(main|master)\\b"],
+      "not": ["actions/", "github/"],
+      "fix": "Pin third-party actions to a full commit SHA; a mutable tag/branch can be moved to malicious code."
+    },
+    {
+      "id": "curl-pipe-shell",
+      "category": "supply-chain",
+      "severity": "high",
+      "title": "curl | sh remote-execution install step",
+      "detectability": "grep",
+      "include": ["*"],
+      "any": ["(curl|wget)\\s+[^\\n|]*\\|\\s*(sudo\\s+)?(sh|bash|zsh)\\b", "iwr\\s+[^\\n|]*\\|\\s*iex", "Invoke-WebRequest[^\\n|]*\\|\\s*Invoke-Expression"],
+      "fix": "Download, inspect, and pin (checksum) before executing; piping a remote script to a shell runs whatever the server sends."
+    },
+    {
+      "id": "npm-postinstall-remote-code",
+      "category": "supply-chain",
+      "severity": "high",
+      "title": "package.json postinstall runs remote / opaque code",
+      "detectability": "config",
+      "include": ["package.json"],
+      "any": ["\"(post|pre)install\"\\s*:\\s*\"[^\"]*(curl|wget|node\\s+-e|bash\\s+-c|powershell)"],
+      "fix": "Remove network/remote-exec from install scripts; review any dependency that needs them."
+    },
+    {
+      "id": "command-allowed-tools-wildcard",
+      "category": "claude-ext",
+      "severity": "high",
+      "title": "Slash command / agent grants unrestricted tools",
+      "detectability": "config",
+      "include": [".md"],
+      "any": ["allowed-tools\\s*:\\s*[^\\n]*(Bash\\(\\*\\)|Bash\\s*$|\\*)", "tools\\s*:\\s*[\"'\\[]*\\*"],
+      "fix": "Scope allowed-tools to the exact commands needed (e.g. Bash(git status:*)); a wildcard lets the command run anything."
+    },
+    {
+      "id": "hook-exfiltrates-secrets",
+      "category": "claude-ext",
+      "severity": "critical",
+      "title": "Hook reads secrets/dotfiles and sends them out",
+      "detectability": "grep",
+      "include": ["*"],
+      "any": ["(printenv|env\\s*\\||cat\\s+[^\\n]*\\.(env|ssh|aws)|~/.ssh|\\.aws/credentials)[^\\n]*(curl|wget|nc\\s|Invoke-WebRequest)", "(curl|wget)[^\\n]*(printenv|\\$\\{?ENV|process\\.env)", "(curl|wget|nc)\\s[^\\n]*\\$\\(\\s*(env|printenv)\\b", "(curl|wget|nc)\\s[^\\n]*(env|printenv)\\s*\\|\\s*base64"],
+      "fix": "A hook that reads env/SSH/.aws and POSTs to a remote is exfiltration. Remove it and rotate anything it could have read."
+    },
+    {
+      "id": "hook-persists-env-via-claude-env-file",
+      "category": "claude-ext",
+      "severity": "high",
+      "title": "Hook writes execution-hijacking env via $CLAUDE_ENV_FILE",
+      "detectability": "grep",
+      "include": ["*"],
+      "any": ["CLAUDE_ENV_FILE", "(ANTHROPIC_BASE_URL|OPENAI_BASE_URL|NODE_OPTIONS|LD_PRELOAD|PYTHONPATH|GIT_SSH_COMMAND)\\s*=\\s*[\"']?[^\\n]*(require|preload|https?://|/tmp/)"],
+      "fix": "Treat $CLAUDE_ENV_FILE writes as privileged; a hook exporting NODE_OPTIONS/LD_PRELOAD/*_BASE_URL hijacks every later process. Remove it."
+    },
+    {
+      "id": "hook-fetches-remote-then-runs",
+      "category": "claude-ext",
+      "severity": "critical",
+      "title": "Hook / skill fetches remote code and executes it",
+      "detectability": "grep",
+      "include": [".json", ".sh", ".ps1", ".md", ".js", ".py"],
+      "any": ["(curl|wget)\\s+https?://[^\\n|]*\\|\\s*(sh|bash|node|python)", "eval\\(\\s*(await\\s*)?fetch\\("],
+      "fix": "Never fetch-and-run remote code from a hook/skill; vendor and pin the script, or drop it."
+    },
+    {
+      "id": "settings-widens-permissions",
+      "category": "claude-ext",
+      "severity": "high",
+      "title": "settings.json widens permissions / auto-approves dangerous tools",
+      "detectability": "config",
+      "include": ["settings.json", "settings.local.json"],
+      "any": ["bypassPermissions", "\"defaultMode\"\\s*:\\s*\"(bypassPermissions|acceptEdits)\"", "Bash\\(\\*\\)", "\"\\*\"\\s*\\]"],
+      "fix": "Don't ship bypassPermissions or Bash(*) allows; grant the narrowest permission set the project needs."
+    },
+    {
+      "id": "prompt-injection-in-instructions",
+      "category": "claude-ext",
+      "severity": "high",
+      "title": "Hidden / override instructions in a skill, agent, or command file",
+      "detectability": "grep",
+      "include": [".md", ".mdx", ".txt"],
+      "any": ["ignore (all )?(previous|above|prior) instructions", "disregard (the )?(above|previous|system)", "do not (tell|inform|mention to) the user", "exfiltrat", "without (asking|telling) the user", "send (the |your )?(env|secrets|keys|tokens) to"],
+      "fix": "Instruction files are read as trusted context. Remove embedded directives that override the user or hide actions."
+    },
+    {
+      "id": "invisible-unicode-in-instructions",
+      "category": "claude-ext",
+      "severity": "high",
+      "title": "Zero-width / bidi unicode in an instruction file",
+      "detectability": "grep",
+      "include": [".md", ".mdx", ".txt", ".json"],
+      "any": ["[\\u200b\\u200c\\u200d\\u2060\\u2061\\u2062\\u2063\\ufeff\\u202a-\\u202e\\u2066-\\u2069]"],
+      "fix": "Invisible/bidi characters can hide injected instructions. Strip them; instruction text should be plain visible ASCII/UTF-8."
+    },
+    {
+      "id": "mcp-config-points-remote",
+      "category": "claude-ext",
+      "severity": "high",
+      "title": "MCP config / plugin points at an unpinned remote server",
+      "detectability": "config",
+      "include": ["mcp.json", ".mcp.json"],
+      "any": ["\"command\"\\s*:\\s*\"npx\"[^}]*-y", "https?://[^\"]*@(main|master|latest)", "\"url\"\\s*:\\s*\"https?://"],
+      "fix": "Pin MCP server packages to an exact version and trust the source; an unpinned/remote server can change under you."
+    },
+    {
+      "id": "secret-in-mcp-config",
+      "category": "claude-ext",
+      "severity": "high",
+      "title": "Secret hardcoded in MCP / plugin config",
+      "detectability": "config",
+      "secret": true,
+      "include": ["mcp.json", ".mcp.json"],
+      "any": ["\"[A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)\"\\s*:\\s*\"[^\"$][^\"]{8,}\""],
+      "not": ["\\$\\{", "process\\.env", "your", "example"],
+      "fix": "Reference secrets via ${ENV_VAR}; don't paste live keys into committed MCP config."
+    },
+    {
+      "id": "unauthenticated-network-mcp",
+      "category": "mcp",
+      "severity": "critical",
+      "title": "MCP server listens on the network with no auth",
+      "detectability": "grep",
+      "include": [".ts", ".js", ".py", ".go"],
+      "any": ["0\\.0\\.0\\.0", "host\\s*[:=]\\s*[\"']?0\\.0\\.0\\.0", "listen\\([^)]*0\\.0\\.0\\.0"],
+      "fix": "Bind stdio/loopback or require an auth token; an MCP server on 0.0.0.0 with no auth exposes every tool to the network."
+    },
+    {
+      "id": "mcp-tool-shells-out",
+      "category": "mcp",
+      "severity": "critical",
+      "title": "MCP tool passes its argument into a shell / eval",
+      "detectability": "trace",
+      "include": [".ts", ".js", ".py"],
+      "any": ["exec(Sync)?\\([^)]*(args|params|input|query)", "os\\.system\\([^)]*(args|params|input)", "subprocess[^\\n]*shell\\s*=\\s*True"],
+      "fix": "Validate/allowlist tool params and use argument-array exec; tool inputs are model/attacker-controlled."
+    },
+    {
+      "id": "electron-insecure-webpreferences",
+      "category": "desktop-and-extensions",
+      "severity": "high",
+      "title": "Electron webPreferences disable the security model",
+      "detectability": "grep",
+      "include": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"],
+      "any": ["nodeIntegration\\s*:\\s*true", "contextIsolation\\s*:\\s*false", "webSecurity\\s*:\\s*false", "enableRemoteModule\\s*:\\s*true", "allowRunningInsecureContent\\s*:\\s*true"],
+      "fix": "Keep contextIsolation:true, nodeIntegration:false, webSecurity:true; expose only vetted APIs through a preload contextBridge."
+    },
+    {
+      "id": "ext-overbroad-host-permissions",
+      "category": "desktop-and-extensions",
+      "severity": "high",
+      "title": "Browser extension requests all-URLs host permissions",
+      "detectability": "config",
+      "include": ["manifest.json"],
+      "any": ["<all_urls>", "[\"']\\*://\\*/\\*[\"']", "[\"']https?://\\*/\\*[\"']"],
+      "fix": "Scope host_permissions and content-script matches to the exact origins needed; <all_urls> lets one compromise touch every site."
+    },
+    {
+      "id": "ext-web-accessible-overbroad",
+      "category": "desktop-and-extensions",
+      "severity": "medium",
+      "title": "Extension exposes web_accessible_resources to all sites",
+      "detectability": "config",
+      "include": ["manifest.json"],
+      "any": ["web_accessible_resources[^\\n]{0,120}\\*"],
+      "fix": "List specific resources and restrict matches to your own origins; a broad web_accessible_resources enables fingerprinting and abuse."
+    },
+    {
+      "id": "tauri-allowlist-all",
+      "category": "desktop-and-extensions",
+      "severity": "high",
+      "title": "Tauri allowlist grants broad fs/shell access",
+      "detectability": "config",
+      "include": ["tauri.conf.json"],
+      "any": ["\"all\"\\s*:\\s*true", "\"scope\"\\s*:\\s*\\[[^\\]]*\\*\\*"],
+      "fix": "Enable only the Tauri APIs actually used and scope fs/shell to required paths; 'all: true' hands the webview full host power."
+    },
+    {
+      "id": "weak-password-hashing",
+      "category": "cryptography-tokens-randomness",
+      "severity": "high",
+      "title": "Password hashed with a fast/broken algorithm",
+      "detectability": "grep",
+      "include": ["*"],
+      "any": ["createHash\\(\\s*[\"'](md5|sha1)[\"']\\)", "\\b(md5|sha1)\\s*\\([^)]*(pass|pwd|secret|cred)", "hashlib\\.(md5|sha1)\\([^)]*(pass|pwd)"],
+      "fix": "Hash passwords with bcrypt, scrypt, or argon2id (salted, slow). MD5/SHA1/unsalted SHA-256 are crackable at scale."
+    },
+    {
+      "id": "ecb-mode-cipher",
+      "category": "cryptography-tokens-randomness",
+      "severity": "high",
+      "title": "AES-ECB or unauthenticated cipher mode",
+      "detectability": "grep",
+      "include": ["*"],
+      "any": ["aes-\\d+-ecb", "MODE_ECB", "modes\\.ECB\\b"],
+      "fix": "Use AES-GCM (authenticated) or AES-CBC+HMAC; ECB leaks plaintext structure (identical blocks encrypt identically)."
+    },
+    {
+      "id": "insecure-rng-for-tokens",
+      "category": "cryptography-tokens-randomness",
+      "severity": "medium",
+      "title": "Math.random() used to mint a token/id",
+      "detectability": "grep",
+      "include": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"],
+      "any": ["Math\\.random\\(\\)\\.toString\\(", "(token|secret|otp|nonce|salt|apikey|api_key|sessionid|session_id)[^\\n=]{0,20}=\\s*[^\\n]*Math\\.random\\("],
+      "fix": "Math.random() is predictable. Use crypto.randomUUID() / crypto.getRandomValues() / randomBytes for anything security-relevant."
+    },
+    {
+      "id": "token-in-web-or-mobile-storage",
+      "category": "cryptography-tokens-randomness",
+      "severity": "medium",
+      "title": "Auth token stored in localStorage / AsyncStorage",
+      "detectability": "grep",
+      "include": [".js", ".jsx", ".ts", ".tsx"],
+      "any": ["(localStorage|sessionStorage|AsyncStorage)\\.setItem\\([^)]*(token|jwt|secret|password|apikey|auth|session)"],
+      "fix": "Web: prefer httpOnly Secure cookies (localStorage is XSS-readable). Mobile: use Keychain/Keystore via expo-secure-store, not AsyncStorage."
+    },
+    {
+      "id": "cleartext-traffic-allowed",
+      "category": "mobile-and-privacy",
+      "severity": "high",
+      "title": "Mobile app allows cleartext (HTTP) traffic",
+      "detectability": "config",
+      "include": ["androidmanifest.xml", "info.plist", ".plist", ".xml"],
+      "any": ["usesCleartextTraffic\\s*=\\s*[\"']true", "NSAllowsArbitraryLoads"],
+      "fix": "Disable cleartext: usesCleartextTraffic=false with a locked network-security-config; NSAllowsArbitraryLoads=false. Cleartext enables MITM."
+    },
+    {
+      "id": "android-debuggable-release",
+      "category": "mobile-and-privacy",
+      "severity": "high",
+      "title": "Android app shipped debuggable",
+      "detectability": "config",
+      "include": ["androidmanifest.xml", ".xml"],
+      "any": ["android:debuggable\\s*=\\s*[\"']true"],
+      "fix": "Never ship android:debuggable=true; it lets anyone attach a debugger and read app memory and data on a real device."
+    },
+    {
+      "id": "android-allowbackup",
+      "category": "mobile-and-privacy",
+      "severity": "low",
+      "title": "Android allowBackup enabled (data extractable via adb)",
+      "detectability": "config",
+      "include": ["androidmanifest.xml", ".xml"],
+      "any": ["android:allowBackup\\s*=\\s*[\"']true"],
+      "fix": "Set android:allowBackup=false (plus backup rules) for apps holding tokens/PII; allowBackup lets `adb backup` pull app data."
+    }
+  ]
+}
