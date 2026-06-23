@@ -71,9 +71,9 @@ Always confirm a candidate at its `file:line` before reporting it. A signal is a
 
 **Real .env / credential file committed to the repo**  `committed-dotenv-or-cred-file`  
 `CRIT` · `config` · webapp, frontend, backend, mcp, plugin, skill, agent, mobile, library, desktop, cicd  
-- signals: .env / .env.local / .env.production / .env.development tracked by git (not just .env.example) · .env not listed in .gitignore; values are real (sk-, AKIA, postgres://user:pass@host) · credentials.json, secrets.json, config/secrets.yml, serviceAccount.json present · Firebase service account JSON with private_key committed
+- signals: .env / .env.local / .env.production / .env.development tracked by git (not just .env.example) · .env not listed in .gitignore; values are real (sk-, AKIA, postgres://<user>:<password>@host) · credentials.json, secrets.json, config/secrets.yml, serviceAccount.json present · Firebase service account JSON with private_key committed
 - readme red flags: "clone and run, the .env is already set up" · "copy my .env values" · "everything you need is in the repo" · "service account file checked in for convenience"
-- example: git ls-files shows .env.production with DATABASE_URL=postgres://admin:s3cr3t@db:5432/prod
+- example: git ls-files shows .env.production with DATABASE_URL=postgres://<user>:<password>@db:5432/prod
 - fix: Add .env* (except .env.example) to .gitignore, git rm --cached, rotate every value, purge from history.
 
 **Secret inlined into the built JS bundle or leaked via source maps**  `secret-in-client-bundle-or-sourcemaps`  
@@ -120,9 +120,9 @@ Always confirm a candidate at its `file:line` before reporting it. A signal is a
 
 **Database/connection URL with embedded password committed**  `db-connection-string-with-password`  
 `HIGH` · `grep` · webapp, backend, mcp, agent, cicd, mobile  
-- signals: postgres://user:password@host, mysql://, mongodb+srv://user:pass@cluster, redis://:password@host, amqps://user:pass@ · DATABASE_URL with real creds in config.js / settings.py / application.properties / appsettings.json · DATABASE_URL exposed via a NEXT_PUBLIC_/VITE_ prefix
+- signals: postgres://<user>:<password>@host, mysql://, mongodb+srv://<user>:<password>@cluster, redis://:<password>@host, amqps://<user>:<password>@ · DATABASE_URL with real creds in config.js / settings.py / application.properties / appsettings.json · DATABASE_URL exposed via a NEXT_PUBLIC_/VITE_ prefix
 - readme red flags: "point it at my database, the URL is in config" · "shared dev DB, connection string included"
-- example: MONGODB_URI=mongodb+srv://admin:p%40ss@cluster0.mongodb.net committed in .env
+- example: MONGODB_URI=mongodb+srv://<user>:<password>@cluster0.example.net committed in .env
 - fix: Load connection strings from secret storage, never commit real ones, rotate exposed DB credentials.
 
 **API key embedded in a shipped mobile app**  `secret-in-mobile-app-binary`  

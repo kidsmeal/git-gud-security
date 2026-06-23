@@ -109,7 +109,7 @@
      ],
      "signals": [
       ".env / .env.local / .env.production / .env.development tracked by git (not just .env.example)",
-      ".env not listed in .gitignore; values are real (sk-, AKIA, postgres://user:pass@host)",
+      ".env not listed in .gitignore; values are real (sk-, AKIA, postgres://<user>:<password>@host)",
       "credentials.json, secrets.json, config/secrets.yml, serviceAccount.json present",
       "Firebase service account JSON with private_key committed"
      ],
@@ -119,7 +119,7 @@
       "everything you need is in the repo",
       "service account file checked in for convenience"
      ],
-     "example": "git ls-files shows .env.production with DATABASE_URL=postgres://admin:s3cr3t@db:5432/prod",
+     "example": "git ls-files shows .env.production with DATABASE_URL=postgres://<user>:<password>@db:5432/prod",
      "fix": "Add .env* (except .env.example) to .gitignore, git rm --cached, rotate every value, purge from history."
     },
     {
@@ -248,7 +248,7 @@
       "mobile"
      ],
      "signals": [
-      "postgres://user:password@host, mysql://, mongodb+srv://user:pass@cluster, redis://:password@host, amqps://user:pass@",
+      "postgres://<user>:<password>@host, mysql://, mongodb+srv://<user>:<password>@cluster, redis://:<password>@host, amqps://<user>:<password>@",
       "DATABASE_URL with real creds in config.js / settings.py / application.properties / appsettings.json",
       "DATABASE_URL exposed via a NEXT_PUBLIC_/VITE_ prefix"
      ],
@@ -256,7 +256,7 @@
       "point it at my database, the URL is in config",
       "shared dev DB, connection string included"
      ],
-     "example": "MONGODB_URI=mongodb+srv://admin:p%40ss@cluster0.mongodb.net committed in .env",
+     "example": "MONGODB_URI=mongodb+srv://<user>:<password>@cluster0.example.net committed in .env",
      "fix": "Load connection strings from secret storage, never commit real ones, rotate exposed DB credentials."
     },
     {
