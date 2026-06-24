@@ -24,6 +24,8 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "drop this config into Claude Desktop, it's ready" · "my MCP config with keys included" · "install this skill, the API key is already wired"
 - **JWT/session/webhook signing secret hardcoded, weak, or committed** `jwt-or-signing-secret-weak-or-committed` · crit
   "default JWT secret works for dev" · "JWT_SECRET=changeme in the sample env" · "webhook secret is in the config"
+- **Modern AI/infra API key format committed (newer provider prefixes)** `secret-modern-key-prefix-sweep` · crit
+  "add your Supabase secret key" · "paste your HuggingFace / Groq / Replicate token" · "API key included"
 - **Secret removed from HEAD but still in git history** `secret-in-git-history` · high
   "we rotated the leaked key, it's fine now" · "the key was removed in a later commit"
 - **Live credential pasted into README, docs, or example config** `secret-in-readme-or-docs` · high
@@ -38,6 +40,8 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "CI is set up, secrets are in the workflow file" · "build with --build-arg API_KEY=..." · "the image comes preconfigured"
 - **Encryption key/IV/salt hardcoded as a constant** `encryption-key-or-iv-hardcoded` · high
   "data is encrypted (with a built-in key)" · "no key management needed"
+- **Secrets in newer deploy/config files (.dev.vars, wrangler vars, *.local, devcontainer)** `secrets-in-newer-deploy-config-files` · high
+  "copy .dev.vars" · "put your secrets in wrangler.toml vars"
 - **Credential visible in a committed screenshot or asset** `secret-in-screenshot-or-asset` · med
   "see screenshot for my setup" · "here's my config (image)"
 - **Secrets/tokens passed in URLs (logged by servers, proxies, referrers)** `secret-in-url-query-params` · med
@@ -105,6 +109,10 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "passwordless, just click the link" · "magic links never expire / valid for a week" · "enter the 6-digit code we email you"
 - **Invite / email-verification token is guessable, sequential, or IDOR-able** `idor-invite-or-verify-token-guessable` · high
   "share this invite link with your team" · "verify by clicking the link in your email" · "invite links by id"
+- **Server Action / framework action mutates with no inline authorization** `server-action-no-inline-authz` · high
+  "auth is handled in middleware" · "protected routes"
+- **Client-visible app/project/tenant id used as the auth boundary** `public-id-as-auth-boundary` · high
+  "just pass your app id" · "no login needed, scoped by project id"
 - **User enumeration via login / reset / signup responses** `user-enumeration` · med
   "tells you if the email exists" · "helpful login error messages" · "checks if username is taken"
 - **Session id not rotated on login / privilege change** `session-fixation-no-rotation` · med
@@ -477,6 +485,8 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "the AI writes and runs the query" · "natural language to SQL" · "the agent generates and executes code"
 - **Agent reads attacker-controlled inbound (email/calendar/issues) and holds autonomous write/send/purchase tools** `agent-untrusted-inbound-autonomous-outbound` · crit
   "auto-triages your inbox" · "replies to emails for you" · "schedules meetings automatically"
+- **Lethal trifecta co-located in one agent (private data + untrusted content + egress)** `agent-lethal-trifecta-colocation` · crit
+  "reads your email and can browse the web and send messages" · "fully autonomous assistant with web access and send"
 - **LLM / RAG output rendered as HTML or markdown without sanitization (AI-app stored XSS)** `llm-output-rendered-unsanitized-xss` · high
   "renders markdown responses" · "rich formatted AI replies" · "supports markdown / images / links in chat"
 - **Data exfiltration via auto-loaded markdown image / link in the agent chat surface** `prompt-injection-markdown-image-exfil` · high
@@ -510,6 +520,8 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "load saved sessions" · "import a model/state file" · "restore from a blob you provide"
 - **MCP server bound to a network port with no auth / wildcard CORS** `mcp-unauthenticated-network-server` · crit
   "expose over the network" · "remote MCP server, no auth needed" · "just point your client at the URL"
+- **MCP server package with import-time payload or provenance mismatch** `mcp-server-package-provenance` · crit
+  "install our MCP server: npx some-unofficial-mcp"
 - **MCP server holds broad creds the caller shouldn't reach (confused deputy)** `mcp-confused-deputy-broad-creds` · high
   "drop in your API key and it can do everything" · "uses your admin token for everything" · "one key, full access"
 - **OAuth token passthrough / audience confusion** `mcp-oauth-token-passthrough` · high
@@ -526,6 +538,8 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "fully autonomous, no confirmations needed" · "the agent just does it" · "unlimited calls / blast emails / scrape at scale"
 - **MCP server disables TLS verification on upstream calls** `mcp-tls-verify-disabled` · high
   "ignore SSL errors" · "works with self-signed by default" · "disable cert checks for convenience"
+- **Local HTTP/SSE MCP server with no DNS-rebinding protection** `mcp-localhost-http-dns-rebinding` · high
+  "runs a local MCP server on localhost"
 - **Generic tool names enable shadowing of trusted tools across servers** `mcp-tool-name-shadowing` · med
   "replaces your other tools" · "use this instead of the built-in" · "takes priority over other MCP servers"
 - **Tool params lack schema/type validation and allowlisting** `mcp-missing-param-validation` · med
@@ -549,7 +563,7 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "control Claude Code from your phone / chat" · "approve pairings by replying to the message" · "auto-responds to anyone who messages"
 - **Hidden / override instructions embedded in SKILL.md, agent, or command body** `prompt-injection-hidden-instructions-in-skill` · high
   "description and body disagree about what the skill does" · "works invisibly / runs silently without bothering you" · "claims read-only but body tells the model to write/commit"
-- **Invisible / non-printing Unicode smuggles instructions into a skill, agent, or tool** `invisible-unicode-in-instructions` · high
+- **Invisible / control-character payload in an instruction or tool-metadata file** `invisible-unicode-in-instructions` · high
   "invisible by construction; only a byte/codepoint scan reveals it"
 - **Slash command / skill grants Bash(*) or unrestricted allowed-tools** `command-allowed-tools-bash-wildcard` · high
   "full shell access for maximum flexibility" · "no permission prompts, just works" · "runs any command you need"
@@ -582,6 +596,15 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
 - **Skill description engineered to over-trigger and shadow legitimate skills** `skill-description-overbroad-trigger` · med
   "triggers on everything for maximum helpfulness" · "always loads first" · "replaces your other tools"
 
+## AI Coding-Agent & IDE-Config Trust
+
+- **Committed agent project-config runs code / redirects the API on clone-open** `claude-project-config-clone-open-rce` · high
+  "clone and run" · "just open in Claude Code" · "no setup, it configures itself"
+- **Committed mcp.json auto-launches an unpinned / secret-forwarding server on open** `committed-mcp-config-autolaunch` · high
+  "MCP server included" · "auto-connects when you open the repo"
+- **Rules File Backdoor: injected directives in a cross-tool instruction file** `rules-file-backdoor-cross-tool` · high
+  "drop in our .cursorrules" · "use our recommended AI rules file"
+
 ## Dependencies & Supply Chain
 
 - **Install lifecycle script (pre/postinstall) fetching or running remote code** `npm-postinstall-remote-code` · crit
@@ -608,6 +631,8 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "publish with npm publish and a repo that keeps .env at the root" · "we ship the whole project to npm"
 - **Package-manager config weakens registry TLS/trust** `package-manager-config-weakens-trust` · high
   "if install fails, set strict-ssl false" · "add --trusted-host to pip" · "use our http registry mirror"
+- **Imported package absent from the lockfile / registry (slopsquatting)** `slopsquat-import-not-in-lockfile` · high
+  "generated with v0/Bolt/Lovable/Cursor" · "AI-scaffolded"
 - **Wide/wildcard version ranges allowing arbitrary future code** `overly-broad-version-ranges` · med
   "uses latest of everything" · "depends on the main branch of <lib> for newest features" · "always up to date with upstream"
 - **Abandoned / unmaintained dependency in a security-critical path** `abandoned-unmaintained-critical-dep` · med
@@ -629,6 +654,8 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "auto-labels issues / PRs" · "comments on your PR automatically" · "greets new contributors / triages issues with a bot"
 - **pull_request_target/workflow_run checks out and runs untrusted PR code** `pull-request-target-checkout-untrusted` · crit
   "runs CI on forked PRs with full secrets" · "labels/comments on external PRs" · "works on PRs from anyone, no maintainer approval needed"
+- **CI AI-agent step fed untrusted event text with write/secret scope** `ai-agent-ci-untrusted-event-context` · crit
+  "@claude will respond to issues and PRs" · "mention the bot to run the agent"
 - **GITHUB_TOKEN / workflow permissions are write-all** `github-token-write-all` · high
   "the bot pushes commits / creates releases / opens PRs for you" · "zero-config CI, no token setup"
 - **Attacker-controlled content written to GITHUB_ENV / GITHUB_PATH / GITHUB_OUTPUT** `github-env-path-injection` · high

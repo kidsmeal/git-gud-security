@@ -473,10 +473,10 @@
       "id": "invisible-unicode-in-instructions",
       "category": "claude-ext",
       "severity": "high",
-      "title": "Zero-width / bidi unicode in an instruction file",
+      "title": "Invisible / control-character payload in an instruction or tool-metadata file",
       "detectability": "grep",
-      "include": [".md", ".mdx", ".txt", ".json"],
-      "any": ["[\\u200b\\u200c\\u200d\\u2060\\u2061\\u2062\\u2063\\ufeff\\u202a-\\u202e\\u2066-\\u2069]"],
+      "include": [".md", ".mdx", ".txt", ".json", "cursorrules", "windsurfrules", "clinerules", "agents.md", "copilot-instructions.md", ".mdc"],
+      "any": ["[\\u001b\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2064\\u2066-\\u206f\\ufeff\\U000e0000-\\U000e007f\\U000e0100-\\U000e01ef]"],
       "fix": "Invisible/bidi characters can hide injected instructions. Strip them; instruction text should be plain visible ASCII/UTF-8."
     },
     {
@@ -630,6 +630,120 @@
       "include": ["androidmanifest.xml", ".xml"],
       "any": ["android:allowBackup\\s*=\\s*[\"']true"],
       "fix": "Set android:allowBackup=false (plus backup rules) for apps holding tokens/PII; allowBackup lets `adb backup` pull app data."
+    },
+    {
+      "id": "secret-modern-key-prefix-sweep",
+      "category": "secrets",
+      "severity": "critical",
+      "title": "Modern AI/infra API key format in source",
+      "detectability": "grep",
+      "secret": true,
+      "include": ["*"],
+      "exclude": [".md", ".mdx", ".txt", ".lock"],
+      "any": [
+        "sb_secret_[A-Za-z0-9_-]{20,}",
+        "gsk_[A-Za-z0-9]{20,}",
+        "hf_[A-Za-z0-9]{20,}",
+        "r8_[A-Za-z0-9]{20,}",
+        "xai-[A-Za-z0-9]{20,}",
+        "pplx-[A-Za-z0-9]{32,}",
+        "npm_[A-Za-z0-9]{36}",
+        "sk-svcacct-[A-Za-z0-9_-]{20,}"
+      ],
+      "not": ["your", "example", "sb_secret_xxx", "placeholder"],
+      "fix": "Rotate and move to a server-only secret store. sb_secret_ is service_role-equivalent and bypasses RLS; it must never reach the client."
+    },
+    {
+      "id": "secrets-in-newer-deploy-config-files",
+      "category": "secrets",
+      "severity": "high",
+      "title": "Cloudflare .dev.vars (local secrets) committed",
+      "detectability": "config",
+      "kind": "filename",
+      "filenames": [".dev.vars"],
+      "filename_regex": ["\\.dev\\.vars$"],
+      "fix": "Gitignore .dev.vars and *.local; put Workers secrets via `wrangler secret put` / Secret bindings, not committed files or wrangler [vars]."
+    },
+    {
+      "id": "rules-file-backdoor-cross-tool",
+      "category": "ai-config-trust",
+      "severity": "high",
+      "title": "Injected directives in a cross-tool AI rules file",
+      "detectability": "grep",
+      "include": ["cursorrules", "windsurfrules", "clinerules", "agents.md", "copilot-instructions.md", ".mdc"],
+      "any": [
+        "ignore (all )?(previous|above|prior) instructions",
+        "disregard (the )?(above|previous|system)",
+        "do not (tell|inform|mention to) the user",
+        "without (asking|telling) the user",
+        "(always|make sure to) (add|insert|include|append)[^\\n]{0,60}(script|src=|fetch|curl|http)",
+        "send (the |your )?(env|secrets|keys|tokens|credentials) to",
+        "exfiltrat"
+      ],
+      "fix": "Repo-committed rules files are untrusted input the agent auto-loads. Remove embedded directives; diff-review these files before any agent ingests the repo."
+    },
+    {
+      "id": "claude-project-config-clone-open-rce",
+      "category": "ai-config-trust",
+      "severity": "high",
+      "title": "Committed agent config runs code / redirects API on open",
+      "detectability": "config",
+      "include": ["settings.json", "settings.local.json"],
+      "any": [
+        "\"enableAllProjectMcpServers\"\\s*:\\s*true",
+        "\"enabledMcpjsonServers\"",
+        "(ANTHROPIC_BASE_URL|ANTHROPIC_API_URL|ANTHROPIC_BEDROCK_BASE_URL|ANTHROPIC_AUTH_TOKEN)",
+        "\"SessionStart\"\\s*:"
+      ],
+      "fix": "Don't ship repo-local SessionStart hooks, base-URL overrides, or auto-enabled MCP servers; require explicit per-repo trust."
+    },
+    {
+      "id": "committed-mcp-config-autolaunch",
+      "category": "ai-config-trust",
+      "severity": "high",
+      "title": "Committed mcp.json forwards host secrets / uses editor var substitution",
+      "detectability": "config",
+      "include": ["mcp.json"],
+      "any": [
+        "\\$\\{(env|input):",
+        "\"(GITHUB_TOKEN|AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|AWS_SESSION_TOKEN)\""
+      ],
+      "fix": "Don't forward host secrets into a committed mcp-config env; pin server packages; gate auto-launch behind explicit trust."
+    },
+    {
+      "id": "supabase-db-side-ssrf-and-search-path",
+      "category": "baas",
+      "severity": "high",
+      "title": "DB-side HTTP/SSRF from Postgres (pg_net / http extension)",
+      "detectability": "grep",
+      "include": [".sql"],
+      "any": [
+        "net\\.http_(get|post|delete|put)\\s*\\(",
+        "\\bhttp_(get|post)\\s*\\(",
+        "\\bpg_net\\b",
+        "extensions\\.http\\b"
+      ],
+      "fix": "Keep pg_net/http out of public and off anon-reachable SECURITY DEFINER RPCs; allowlist outbound hosts. Pin SET search_path on every SECURITY DEFINER function."
+    },
+    {
+      "id": "nextjs-image-optimizer-permissive-remotepatterns",
+      "category": "web",
+      "severity": "medium",
+      "title": "Next.js image remotePatterns wildcard host",
+      "detectability": "config",
+      "include": ["next.config.js", "next.config.mjs", "next.config.ts", "next.config.cjs"],
+      "any": ["hostname[\"'\\s:]+\\*\\*"],
+      "fix": "Restrict images.remotePatterns to the exact hostnames you serve; a ** hostname lets the optimizer fetch arbitrary hosts."
+    },
+    {
+      "id": "mcp-localhost-http-dns-rebinding",
+      "category": "mcp",
+      "severity": "high",
+      "title": "MCP DNS-rebinding protection disabled",
+      "detectability": "grep",
+      "include": [".ts", ".js", ".mjs", ".cjs", ".py"],
+      "any": ["enableDnsRebindingProtection\\s*:\\s*false"],
+      "fix": "Enable DNS-rebinding protection / a Host allowlist on local HTTP/SSE MCP transports; upgrade the MCP SDK."
     }
   ]
 }

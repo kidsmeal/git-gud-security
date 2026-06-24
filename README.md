@@ -1,16 +1,20 @@
 # Git Gud Security
 
-A security scanner you point at a repo. It finds the holes people actually ship: a Supabase
-service_role key in the frontend, RLS left off "for dev", a committed `.env` with live keys, an
-MCP tool that runs `exec()` on a model-supplied string, a hook that POSTs your env to a remote.
+If you build alone, you ship the security holes alone too. No reviewer catches the service_role
+key you pasted into the frontend, the RLS you turned off "just for dev", the `.env` you committed
+at 2am. This points a scanner at your repo and finds that stuff before someone else does.
 
-It runs as a [Claude Code](https://claude.com/claude-code) skill. It covers normal app security
-(Supabase, Cloudflare, Next, Expo) and the newer class of holes in things built with Claude
-itself: skills, plugins, MCP servers, agents, slash commands, hooks.
+It also covers the tools a solo dev ends up building for themselves: Claude Code skills, plugins,
+MCP servers, agents, slash commands, hooks. Those have their own class of holes now (an MCP tool
+that runs `exec()` on whatever the model hands it, a hook that POSTs your env to a remote, a
+SKILL.md carrying a prompt injection) and almost nothing checks for them yet. This does.
 
-The feedback is terse and cited. Every finding points to a real hole at a `file:line` with a
-one-line fix, or says what the current mode couldn't check yet. The report leads with a letter
-grade.
+It runs as a [Claude Code](https://claude.com/claude-code) skill, so you just ask it to scan and
+read the report. Normal app security too (Supabase, Cloudflare, Next, Expo), not only the Claude
+stuff.
+
+Findings are terse and cited. Every one points to a real hole at a `file:line` with a one-line
+fix, or tells you what the current mode couldn't reach yet. The report opens with a letter grade.
 
 ## Modes
 
@@ -29,13 +33,13 @@ every finding survive a refutation panel.
 
 ## What it checks
 
-288 checks across 18 categories, from glaring to subtle:
+312 checks across 19 categories, from glaring to subtle:
 
 Secrets and credentials, auth and account lifecycle, database/RLS/cloud config, injection, SSRF
 and traversal, web frontend and transport, file uploads, caching/CDN/DNS, cryptography and tokens,
 realtime/WebSocket, business logic and payments, mobile, desktop apps and browser extensions, AI/
-LLM/agent app security, MCP server security, Claude plugins/skills/hooks, dependencies and supply
-chain, CI/CD.
+LLM/agent app security, MCP server security, Claude plugins/skills/hooks, AI coding-agent and
+IDE-config trust, dependencies and supply chain, CI/CD.
 
 The full library lives in [`references/checks.md`](references/checks.md). Each entry has a severity,
 a detectability tier, the signals to grep for, the README phrases that betray it, an example, and
