@@ -222,7 +222,7 @@
       "title": "SQL built by string interpolation",
       "detectability": "grep",
       "include": [".js", ".jsx", ".ts", ".tsx", ".py", ".rb", ".php", ".go", ".java"],
-      "any": ["(SELECT|INSERT INTO|UPDATE|DELETE FROM)\\s+[^;`\"']*(\\$\\{|\"\\s*\\+|'\\s*\\+|%s|f\"|f')"],
+      "any": ["\\b(SELECT\\s[^;]*\\sFROM\\s|INSERT\\s+INTO\\s|UPDATE\\s+\\w+\\s+SET\\s|DELETE\\s+FROM\\s)[^;]*(\\$\\{|\\{[A-Za-z_]|['\"`]\\s*\\+|\\+\\s*['\"`]|%s|%d|%\\()"],
       "not": ["\\?", "\\$1", ":param", "prepared"],
       "fix": "Use parameterized queries / bound params; never concatenate user input into SQL."
     },
@@ -416,8 +416,8 @@
       "title": "Slash command / agent grants unrestricted tools",
       "detectability": "config",
       "include": [".md"],
-      "any": ["allowed-tools\\s*:\\s*[^\\n]*(Bash\\(\\*\\)|Bash\\s*$|\\*)", "tools\\s*:\\s*[\"'\\[]*\\*"],
-      "fix": "Scope allowed-tools to the exact commands needed (e.g. Bash(git status:*)); a wildcard lets the command run anything."
+      "any": ["allowed-tools\\s*:\\s*[\\[\"'\\s]*\\*(?![A-Za-z])", "allowed-tools\\s*:[^\\n]*Bash\\(\\*\\)", "allowed-tools\\s*:[^\\n]*\\bBash\\b(?!\\()", "\\btools\\s*:\\s*[\\[\"'\\s]*\\*(?![A-Za-z])"],
+      "fix": "Scope allowed-tools to the exact commands the command needs (e.g. Bash(git status:*)); flag only Bash(*), a bare unscoped Bash, or a literal * (all tools). Scoped globs like Bash(node:*) are correct and not flagged."
     },
     {
       "id": "hook-exfiltrates-secrets",
