@@ -7,7 +7,8 @@ at 2am. This points a scanner at your repo and finds that stuff before someone e
 It also covers the tools a solo dev ends up building for themselves: Claude Code skills, plugins,
 MCP servers, agents, slash commands, hooks. Those have their own class of holes now (an MCP tool
 that runs `exec()` on whatever the model hands it, a hook that POSTs your env to a remote, a
-SKILL.md carrying a prompt injection) and almost nothing checks for them yet. This does.
+SKILL.md or `.cursorrules` carrying a prompt injection, a committed `.mcp.json` that auto-spawns a
+server the moment you open the repo) and almost nothing checks for them yet. This does.
 
 It runs as a [Claude Code](https://claude.com/claude-code) skill, so you just ask it to scan and
 read the report. Normal app security too (Supabase, Cloudflare, Next, Expo), not only the Claude
@@ -30,6 +31,10 @@ Four modes, each a strict superset of the one below it. Pick by how deep you wan
 `readme` mode is the cheapest and often the most damning, because a lot of projects advertise
 their own holes. `quick` is the default. `ultra` keeps the false-positive rate near zero by making
 every finding survive a refutation panel.
+
+`full` and `ultra` open code from a repo you may not trust, so the scanner won't honor that repo's
+own hooks, `.claude`/`.cursor` settings, or `.mcp.json` while it reads them. It treats those as
+findings to report and never loads them as config.
 
 ## What it checks
 
