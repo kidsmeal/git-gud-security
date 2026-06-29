@@ -33,6 +33,14 @@ is this safe to ship?
 
 Default is `quick`. Each mode is a strict superset of the one below it.
 
+`readme` is the cheapest pass. It catches more than you'd expect because a lot of projects advertise their own holes in their docs ("just paste your service key here", "RLS disabled for easy local dev"). Findings are marked as inferred, not confirmed, unless the README literally shows the vulnerable thing.
+
+`quick` runs a deterministic pattern sweep on top of the readme pass. It greps for secret formats, known-dangerous code patterns, and config red flags using `scripts/patterns.json` (79 patterns). Every hit is confirmed at the source line before reporting. Fast, low false-positive rate, catches the things that actually burn people.
+
+`full` reads the code and traces dataflow. This is where injection sinks, SSRF, IDOR, broken multi-tenant isolation, and missing per-object authorization checks get caught. It also audits RLS policies, CI/CD workflows, and dependency hygiene. Slower, but it finds the holes that pattern matching can't reach.
+
+`ultra` runs the full scan as an adversarial multi-agent workflow. Every finding goes to independent skeptics prompted to refute it. A finding only survives if the majority confirm it's real and reachable. This keeps the false-positive rate near zero at the cost of more tokens.
+
 `full` and `ultra` treat the scanned repo as untrusted. They won't honor its hooks, `.claude`/`.cursor` settings, or `.mcp.json`. Those files are findings to report, not config to load.
 
 ## Standalone scanner
