@@ -1,6 +1,6 @@
 # Git Gud Security
 
-Security scanner for repos. 331 checks across 19 categories. Runs as a Claude Code skill or as a standalone Python script.
+Security scanner for repos. 332 checks across 19 categories. Runs as a Claude Code skill or as a standalone Python script.
 
 Covers app security (Supabase, Firebase, Cloudflare Workers, Next.js, Flutter, Expo) and the AI tooling surface (MCP servers, Claude skills/plugins/hooks, coding-agent config files, prompt injection in instruction files). Finds secrets, auth gaps, injection sinks, business logic holes, supply chain risks, CI/CD misconfig.
 
@@ -35,7 +35,7 @@ Default is `quick`. Each mode is a strict superset of the one below it.
 
 `readme` is the cheapest pass. It catches more than you'd expect because a lot of projects advertise their own holes in their docs ("just paste your service key here", "RLS disabled for easy local dev"). Findings are marked as inferred, not confirmed, unless the README literally shows the vulnerable thing.
 
-`quick` runs a deterministic pattern sweep on top of the readme pass. It greps for secret formats, known-dangerous code patterns, and config red flags using `scripts/patterns.json` (79 patterns). Every hit is confirmed at the source line before reporting. Fast, low false-positive rate, catches the things that actually burn people.
+`quick` runs a deterministic pattern sweep on top of the readme pass. It greps for secret formats, known-dangerous code patterns, and config red flags using `scripts/patterns.json` (80 patterns). Every hit is confirmed at the source line before reporting. Fast, low false-positive rate, catches the things that actually burn people.
 
 `full` reads the code and traces dataflow. This is where injection sinks, SSRF, IDOR, broken multi-tenant isolation, and missing per-object authorization checks get caught. It also audits RLS policies, CI/CD workflows, and dependency hygiene. Slower, but it finds the holes that pattern matching can't reach.
 

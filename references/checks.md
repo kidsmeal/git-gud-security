@@ -4,7 +4,7 @@
 
 The master list of holes this skill knows. Source of truth for `quick`, `full`, and `ultra` scans. Read the categories relevant to what you're scanning before you start; for a README-only pass use `readme-redflags.md` instead (it's the fast lookup).
 
-**331 checks across 19 categories.** `scripts/patterns.json` (the scanner's grep/config subset) links back here by `id`.
+**332 checks across 19 categories.** `scripts/patterns.json` (the scanner's grep/config subset) links back here by `id`.
 
 ## How to read an entry
 
@@ -26,7 +26,7 @@ Always confirm a candidate at its `file:line` before reporting it. A signal is a
 
 1. [Secrets & Credentials](#secrets-and-credentials) — 20 checks (9 critical)
 2. [Auth, Access Control & Account Lifecycle](#authn-authz-access-control) — 39 checks (9 critical)
-3. [Database, RLS & Cloud Config](#datastore-rls-and-cloud-config) — 26 checks (7 critical)
+3. [Database, RLS & Cloud Config](#datastore-rls-and-cloud-config) — 27 checks (8 critical)
 4. [Injection & Unsafe Execution](#injection) — 13 checks (5 critical)
 5. [SSRF, Path Traversal & Deserialization](#ssrf-traversal-deserialization) — 10 checks (2 critical)
 6. [Web Frontend, Transport & Headers](#client-side-web-security) — 19 checks (3 critical)
@@ -516,6 +516,13 @@ Always confirm a candidate at its `file:line` before reporting it. A signal is a
 - readme red flags: "uses metadata for role checks" · "roles stored in user profile"
 - example: CREATE POLICY ... USING (auth.jwt()->'user_metadata'->>'role' = 'admin') -- any user calls updateUser({data:{role:'admin'}}) and is admin
 - fix: Gate RLS on auth.uid(), app_metadata (server-only), or a server-managed roles table; never trust user_metadata for authorization.
+
+**Authorization decision gated on user-writable user_metadata (app code)**  `user-metadata-authz-client`  
+`CRIT` · `grep` · webapp, backend, frontend, mobile  
+- signals: JS/TS branch like if (user.user_metadata.role === 'admin') or const { role } = session.user.user_metadata used for an authz decision · user_metadata.role / .is_admin / .plan / .tier / .entitlement read in a route handler, server action, middleware, or React/Vue/Svelte guard · Supabase user_metadata (raw_user_meta_data) is writable by the end user via supabase.auth.updateUser({data:{...}}); app_metadata is server-only but the two are routinely confused · the correct field for roles is app_metadata, set only with the service_role key
+- readme red flags: "role stored in user metadata" · "set the user's role on signup metadata"
+- example: if (user.user_metadata.role === 'admin') { /* admin action */ } -- attacker calls supabase.auth.updateUser({data:{role:'admin'}}), refreshes the token, and the check passes
+- fix: Never branch authorization on user_metadata. Read roles from app_metadata (service-role-only) or a server-managed roles table, and enforce the check server-side, not in client code.
 
 **SECURITY DEFINER view/RPC bypasses RLS or lacks internal authz**  `supabase-security-definer-view-or-rpc`  
 `HIGH` · `grep` · backend, webapp  

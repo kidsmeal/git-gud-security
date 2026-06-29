@@ -799,6 +799,20 @@
       "fix": "Gate RLS on auth.uid(), app_metadata (server-only), or a server-managed roles table; user_metadata is writable by end users."
     },
     {
+      "id": "user-metadata-authz-client",
+      "category": "baas",
+      "severity": "critical",
+      "title": "Authorization decision gated on user-writable user_metadata (app code)",
+      "detectability": "grep",
+      "include": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte", ".astro"],
+      "any": [
+        "(?:user_metadata|raw_user_meta_data)[\"'\\]]?\\s*[.?\\[][^\\n]{0,40}(role|is_?admin|isadmin|permission|entitlement|premium|plan|tier|access_level|claims?)",
+        "\\b(role|is_?admin|isadmin|permission|entitlement|premium|plan|tier|access_level)\\b[^\\n]{0,40}(?:user_metadata|raw_user_meta_data)"
+      ],
+      "not": ["app_metadata", "^\\s*//", "^\\s*\\*"],
+      "fix": "user_metadata is end-user-writable via supabase.auth.updateUser() (PUT /auth/v1/user) — a user can set their own role to admin with no error. Branch authz on app_metadata (service-role-only) or a server-managed roles table, and enforce the check server-side."
+    },
+    {
       "id": "wrangler-toml-secrets-in-vars",
       "category": "secrets",
       "severity": "high",

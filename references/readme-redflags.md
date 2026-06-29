@@ -142,6 +142,8 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "spin up Mongo with docker, no config needed" · "Redis for sessions, no password needed" · "Elasticsearch with security off for simplicity"
 - **RLS policy references user-writable metadata (trivially bypassable)** `rls-policy-user-metadata-bypass` · crit
   "uses metadata for role checks" · "roles stored in user profile"
+- **Authorization decision gated on user-writable user_metadata (app code)** `user-metadata-authz-client` · crit
+  "role stored in user metadata" · "set the user's role on signup metadata"
 - **SECURITY DEFINER view/RPC bypasses RLS or lacks internal authz** `supabase-security-definer-view-or-rpc` · high
   "we expose a flattened view for the frontend" · "call our database functions directly from the client" · "RPC helpers for everything"
 - **BYPASSRLS role fronting the API or over-broad PostgREST exposed schema** `postgres-bypassrls-or-exposed-schema` · high
