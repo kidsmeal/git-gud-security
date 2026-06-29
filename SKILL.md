@@ -224,7 +224,7 @@ target repo's config precedence.
 
 ## Reference files
 
-- `references/checks.md` — the master check library (312 checks, 19 categories). Generated. Every
+- `references/checks.md` — the master check library (331 checks, 19 categories). Generated. Every
   hole this skill knows, grouped by category, each with severity, detectability tier, what to grep
   for, the README red-flag phrases, an example, and the fix. **Read the relevant categories at the
   start of any quick/full/ultra scan** — it is the source of truth for what to look for.

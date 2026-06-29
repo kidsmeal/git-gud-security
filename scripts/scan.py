@@ -30,7 +30,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SKIP_DIRS = {
     "node_modules", ".git", "dist", "build", ".next", "out", ".nuxt", ".svelte-kit",
     "vendor", "target", ".venv", "venv", "__pycache__", ".mypy_cache", ".pytest_cache",
-    "coverage", ".turbo", ".cache", "bower_components", ".gradle", ".idea", ".vscode",
+    "coverage", ".turbo", ".cache", "bower_components", ".gradle", ".idea",
     "Pods", "DerivedData", ".terraform",
 }
 
