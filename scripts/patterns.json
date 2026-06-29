@@ -744,6 +744,133 @@
       "include": [".ts", ".js", ".mjs", ".cjs", ".py"],
       "any": ["enableDnsRebindingProtection\\s*:\\s*false"],
       "fix": "Enable DNS-rebinding protection / a Host allowlist on local HTTP/SSE MCP transports; upgrade the MCP SDK."
+    },
+    {
+      "id": "vscode-tasks-auto-execute",
+      "category": "ai-config-trust",
+      "severity": "high",
+      "title": "VS Code tasks.json runs code on folder open",
+      "detectability": "config",
+      "include": ["tasks.json"],
+      "any": ["\"runOn\"\\s*:\\s*\"folderOpen\"", "\"folderOpen\""],
+      "fix": "Remove runOn:folderOpen from committed tasks.json; never auto-execute commands on project open in a shared repo."
+    },
+    {
+      "id": "cursor-always-apply-rule",
+      "category": "ai-config-trust",
+      "severity": "high",
+      "title": "Cursor rule file forces injection on every prompt",
+      "detectability": "config",
+      "include": [".mdc"],
+      "any": ["alwaysApply\\s*:\\s*true"],
+      "fix": "Review and remove alwaysApply:true from committed .cursor/rules/*.mdc files; rules should require explicit opt-in."
+    },
+    {
+      "id": "gemini-settings-session-hook",
+      "category": "ai-config-trust",
+      "severity": "high",
+      "title": "Gemini CLI config runs code on session start",
+      "detectability": "config",
+      "include": ["settings.json"],
+      "any": ["\"SessionStart\"\\s*:"],
+      "not": ["\\.claude"],
+      "fix": "Remove SessionStart hooks from committed .gemini/settings.json; require explicit per-repo trust."
+    },
+    {
+      "id": "getsession-unverified-serverside",
+      "category": "auth",
+      "severity": "high",
+      "title": "Unverified client session used for server-side auth",
+      "detectability": "grep",
+      "include": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"],
+      "any": ["getSession\\(\\)"],
+      "not": ["getUser", "verifyToken", "verify\\(", "test", "spec", "\\.test\\.", "\\.spec\\."],
+      "fix": "Use getUser() (server-verified) for auth decisions; getSession() reads unverified local state and is trivially spoofable server-side."
+    },
+    {
+      "id": "rls-policy-user-metadata-bypass",
+      "category": "baas",
+      "severity": "critical",
+      "title": "RLS policy references user-writable metadata (bypassable)",
+      "detectability": "grep",
+      "include": [".sql"],
+      "any": ["user_metadata", "raw_user_meta_data"],
+      "not": ["app_metadata", "-- ", "comment"],
+      "fix": "Gate RLS on auth.uid(), app_metadata (server-only), or a server-managed roles table; user_metadata is writable by end users."
+    },
+    {
+      "id": "wrangler-toml-secrets-in-vars",
+      "category": "secrets",
+      "severity": "high",
+      "title": "Secrets committed in wrangler.toml [vars] section",
+      "detectability": "grep",
+      "include": [".toml"],
+      "any": ["(SECRET|_KEY|_TOKEN|PASSWORD|DATABASE_URL|PRIVATE|API_KEY)\\s*=\\s*\"[^\"$]{8,}\""],
+      "not": ["\\$\\{", "your", "example", "changeme", "placeholder", "xxx", "test"],
+      "fix": "Move secrets to `wrangler secret put`; use [vars] only for non-sensitive config. Keep local secrets in .dev.vars (gitignored)."
+    },
+    {
+      "id": "webhook-empty-secret-bypass",
+      "category": "business-logic",
+      "severity": "critical",
+      "title": "Webhook signature verification with empty/missing secret",
+      "detectability": "grep",
+      "include": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".py", ".rb"],
+      "any": ["constructEvent\\([^)]*,\\s*[\"'][\"']\\s*\\)", "constructEvent\\([^)]*,\\s*\"\"", "construct_event\\([^)]*,\\s*[\"'][\"']", "Webhook\\.construct_event\\([^)]*secret\\s*=\\s*[\"'][\"']"],
+      "fix": "Fail closed: assert the webhook secret is a non-empty string at startup. An empty secret lets any forged payload pass verification (CVE-2026-41432)."
+    },
+    {
+      "id": "flutter-dotenv-secrets-in-bundle",
+      "category": "mobile-and-privacy",
+      "severity": "high",
+      "title": "Dotenv package bundles .env file into the app binary",
+      "detectability": "config",
+      "include": [".yaml", ".yml"],
+      "any": ["flutter_dotenv", "react_native_dotenv", "react-native-dotenv"],
+      "fix": "Never bundle real secrets in a mobile app via dotenv. Use a backend proxy for sensitive API calls; only include publishable/anon keys in the client."
+    },
+    {
+      "id": "mobile-shared-prefs-sensitive-data",
+      "category": "mobile-and-privacy",
+      "severity": "high",
+      "title": "Sensitive data stored in plaintext local preferences",
+      "detectability": "grep",
+      "include": [".dart", ".kt", ".java", ".swift", ".m"],
+      "any": ["(SharedPreferences|UserDefaults|NSUserDefaults|getSharedPreferences)\\.[^\\n]*(token|password|secret|jwt|bearer|session_id|api_key|apiKey|auth|credit|ssn|private_key)"],
+      "not": ["secure_storage", "flutter_secure_storage", "Keychain", "KeyStore", "EncryptedSharedPreferences"],
+      "fix": "Use platform secure storage (Keychain / Android Keystore / flutter_secure_storage / expo-secure-store) for sensitive data. SharedPreferences/UserDefaults is plaintext."
+    },
+    {
+      "id": "realtime-delete-event-rls-bypass",
+      "category": "baas",
+      "severity": "high",
+      "title": "REPLICA IDENTITY FULL leaks full row data via Realtime DELETE",
+      "detectability": "grep",
+      "include": [".sql"],
+      "any": ["REPLICA\\s+IDENTITY\\s+FULL"],
+      "fix": "Use REPLICA IDENTITY DEFAULT (primary key only) for tables with sensitive columns in Realtime; DELETE events with FULL broadcast all column values past RLS."
+    },
+    {
+      "id": "deep-link-scheme-hijackable",
+      "category": "mobile-and-privacy",
+      "severity": "medium",
+      "title": "Custom URL scheme deep link hijackable by any installed app",
+      "detectability": "config",
+      "include": [".xml"],
+      "any": ["android:scheme=\"(?!https?)[a-z][a-z0-9+.-]*\""],
+      "not": ["android:autoVerify\\s*=\\s*\"true\""],
+      "fix": "Use App Links (https:// with autoVerify + assetlinks.json) or Universal Links instead of custom schemes for auth callbacks."
+    },
+    {
+      "id": "log-sensitive-request-data",
+      "category": "web",
+      "severity": "medium",
+      "title": "Sensitive request data logged without sanitization",
+      "detectability": "grep",
+      "include": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".py", ".rb", ".go", ".java"],
+      "any": ["(console\\.log|logger\\.(info|debug|warn|error)|log\\.(info|debug|warn|error)|print|logging\\.(info|debug))\\([^)]*\\b(req\\.body|request\\.body|req\\.headers|request\\.headers)"],
+      "not": ["content-type", "x-request-id", "sanitize", "redact", "mask"],
+      "fix": "Sanitize logs: strip or mask authorization headers, passwords, tokens, and PII before logging. Use structured logging with explicit field allowlists."
     }
   ]
 }

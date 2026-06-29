@@ -113,6 +113,8 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "auth is handled in middleware" · "protected routes"
 - **Client-visible app/project/tenant id used as the auth boundary** `public-id-as-auth-boundary` · high
   "just pass your app id" · "no login needed, scoped by project id"
+- **Unverified client session used for server-side auth decisions** `getsession-unverified-serverside` · high
+  "uses getSession for auth checks" · "checks session on the server"
 - **User enumeration via login / reset / signup responses** `user-enumeration` · med
   "tells you if the email exists" · "helpful login error messages" · "checks if username is taken"
 - **Session id not rotated on login / privilege change** `session-fixation-no-rotation` · med
@@ -138,6 +140,8 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "uses Firebase Admin for full access" · "no security rules needed, admin handles it" · "drop in your service account json"
 - **MongoDB/Redis/Elasticsearch/Postgres with no auth and exposed port** `datastore-no-auth-public` · crit
   "spin up Mongo with docker, no config needed" · "Redis for sessions, no password needed" · "Elasticsearch with security off for simplicity"
+- **RLS policy references user-writable metadata (trivially bypassable)** `rls-policy-user-metadata-bypass` · crit
+  "uses metadata for role checks" · "roles stored in user profile"
 - **SECURITY DEFINER view/RPC bypasses RLS or lacks internal authz** `supabase-security-definer-view-or-rpc` · high
   "we expose a flattened view for the frontend" · "call our database functions directly from the client" · "RPC helpers for everything"
 - **BYPASSRLS role fronting the API or over-broad PostgREST exposed schema** `postgres-bypassrls-or-exposed-schema` · high
@@ -156,6 +160,8 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "nightly backup to a public bucket" · "download the latest dump here" · "exports saved under /public"
 - **Secrets in committed Terraform state / .tfvars / plan output** `terraform-state-secrets-committed` · high
   "just run terraform apply, state is in the repo" · "config lives in terraform.tfvars (committed)" · "no remote backend needed"
+- **Secrets committed in wrangler.toml [vars] section** `wrangler-toml-secrets-in-vars` · high
+  "add your API key to wrangler.toml" · "set your secrets in [vars]"
 - **RLS enabled but wide GRANTs remain; relies on 'no policy = deny'** `supabase-rls-no-policy-stale-grants` · med
   "RLS enabled (secure by default)" · "we locked it down with RLS"
 - **RLS protects rows but not columns; PII/secret columns selectable** `supabase-column-level-pii-leak` · med
@@ -433,6 +439,8 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "in-app browser / WebView" · "native bridge to the web dashboard" · "we load our web app inside the shell"
 - **Debuggable build flag left on in a shipped/release app** `debuggable-build-shipped` · high
   "debug build for testing" · "sideload the debug apk" · "attach a debugger to inspect"
+- **Dotenv package bundles .env file into the app binary** `flutter-dotenv-secrets-in-bundle` · high
+  "uses dotenv for API keys" · "loads secrets from .env at runtime"
 - **PII over-collection and session-replay / analytics leakage (no masking, no deletion path)** `pii-privacy-exposure-and-analytics-leakage` · med
   "session replay" · "we record user sessions" · "full analytics"
 - **No certificate pinning on a high-value mobile app (network MITM)** `no-certificate-pinning` · med
@@ -441,6 +449,8 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "copy your API key / seed phrase to clipboard" · "tap to copy your token" · "shows your recovery phrase on screen"
 - **allowBackup=true lets app data (incl. tokens) be extracted via adb backup** `android-backup-data-extraction` · med
   "your data is backed up automatically" · "restore your session on a new phone" · "cloud backup of app data"
+- **Custom URL scheme deep link hijackable by any installed app** `deep-link-scheme-hijackable` · med
+  "uses deep links for auth callback" · "redirect URI uses custom scheme"
 - **No root/jailbreak or integrity awareness in a high-risk app** `no-root-jailbreak-awareness-high-risk` · low
   "works on rooted/jailbroken devices" · "no device restrictions" · "runs anywhere including emulators"
 - **Tapjacking: sensitive actions with no overlay protection** `tapjacking-overlay-no-protection` · low
@@ -604,6 +614,8 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "MCP server included" · "auto-connects when you open the repo"
 - **Rules File Backdoor: injected directives in a cross-tool instruction file** `rules-file-backdoor-cross-tool` · high
   "drop in our .cursorrules" · "use our recommended AI rules file"
+- **VS Code tasks.json runs code on folder open** `vscode-tasks-auto-execute` · high
+  "auto-runs setup on open" · "tasks run automatically when you open the project"
 
 ## Dependencies & Supply Chain
 
