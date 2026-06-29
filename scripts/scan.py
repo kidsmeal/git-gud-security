@@ -265,9 +265,19 @@ def main():
         sys.exit(1)
 
     patterns, do_redact = load_patterns()
-    content_findings, files_scanned = scan_content(root, patterns, do_redact)
-    name_findings = scan_filenames(root, patterns)
-    env_findings = check_env_hygiene(root)
+
+    if args.mode == "readme":
+        # readme mode: config/filename checks only, no grep patterns
+        content_pats = [p for p in patterns if p.get("detectability") == "config"
+                        and p.get("kind", "content") == "content"]
+        content_findings, files_scanned = scan_content(root, content_pats, do_redact)
+        name_findings = scan_filenames(root, patterns)
+        env_findings = check_env_hygiene(root)
+    else:
+        # quick/full: all grep + config patterns (trace tier is the LLM's job)
+        content_findings, files_scanned = scan_content(root, patterns, do_redact)
+        name_findings = scan_filenames(root, patterns)
+        env_findings = check_env_hygiene(root)
 
     findings = content_findings + name_findings + env_findings
     sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
