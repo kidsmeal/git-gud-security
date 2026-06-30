@@ -46,14 +46,14 @@ def test_true_positives(mode):
 
     actual_ids = sorted(set(f["id"] for f in actual["findings"]))
 
-    with open(PATTERNS_JSON) as f:
+    with open(PATTERNS_JSON, encoding="utf-8") as f:
         all_patterns = json.load(f)["patterns"]
     all_ids = sorted(p["id"] for p in all_patterns)
 
     if mode == "quick":
-        expected_ids = all_ids
+        expected_ids = sorted(set(all_ids))
     else:
-        with open(expected_file) as f:
+        with open(expected_file, encoding="utf-8") as f:
             expected = json.load(f)
         expected_ids = sorted(set(f["id"] for f in expected["findings"]))
 
@@ -101,7 +101,7 @@ def test_json_valid():
     for name in ["scripts/checks.data.json", "scripts/patterns.json"]:
         path = os.path.join(ROOT, name)
         try:
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 json.load(f)
             print(f"  PASS: {name}")
         except (json.JSONDecodeError, FileNotFoundError) as e:
@@ -111,9 +111,9 @@ def test_json_valid():
 
 def test_pattern_check_alignment():
     print("\n--- pattern/check ID alignment ---")
-    with open(PATTERNS_JSON) as f:
+    with open(PATTERNS_JSON, encoding="utf-8") as f:
         patterns = json.load(f)["patterns"]
-    with open(os.path.join(ROOT, "scripts", "checks.data.json")) as f:
+    with open(os.path.join(ROOT, "scripts", "checks.data.json"), encoding="utf-8") as f:
         checks_data = json.load(f)
 
     check_ids = set()
@@ -132,13 +132,13 @@ def test_pattern_check_alignment():
 def test_counts_match():
     global failed
     print("\n--- documented counts ---")
-    with open(os.path.join(ROOT, "scripts", "checks.data.json")) as f:
+    with open(os.path.join(ROOT, "scripts", "checks.data.json"), encoding="utf-8") as f:
         data = json.load(f)
     actual_count = sum(len(cat["checks"]) for cat in data["categories"])
 
     for doc in ["README.md", "SKILL.md"]:
         path = os.path.join(ROOT, doc)
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             content = f.read()
         import re
         m = re.search(r"(\d{3})\s+checks", content)

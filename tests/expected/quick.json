@@ -21,11 +21,11 @@
       "file": "auth.ts",
       "line": 7,
       "snippet": "const role = session.data.session?.user.user_metadata.role;",
-      "fix": "user_metadata is end-user-writable via supabase.auth.updateUser() (PUT /auth/v1/user) \u2014 a user can set their own role to admin with no error. Branch authz on app_metadata (service-role-only) or a server-managed roles table, and enforce the check server-side.",
+      "fix": "user_metadata is end-user-writable via supabase.auth.updateUser() (PUT /auth/v1/user) \u00e2\u20ac\u201d a user can set their own role to admin with no error. Branch authz on app_metadata (service-role-only) or a server-managed roles table, and enforce the check server-side.",
       "detectability": "grep"
     },
     {
-      "id": "supabase-rls-disabled",
+      "id": "supabase-rls-disabled-public-table",
       "category": "baas",
       "severity": "critical",
       "title": "RLS disabled on a table (public API fully open)",
@@ -47,7 +47,7 @@
       "detectability": "grep"
     },
     {
-      "id": "pull-request-target-checkout",
+      "id": "pull-request-target-checkout-untrusted",
       "category": "cicd",
       "severity": "critical",
       "title": "pull_request_target builds untrusted PR code",
@@ -58,7 +58,7 @@
       "detectability": "config"
     },
     {
-      "id": "actions-expression-injection",
+      "id": "actions-expression-injection-run",
       "category": "cicd",
       "severity": "critical",
       "title": "Untrusted GitHub event field interpolated into run:",
@@ -69,7 +69,7 @@
       "detectability": "config"
     },
     {
-      "id": "actions-expression-injection",
+      "id": "actions-expression-injection-run",
       "category": "cicd",
       "severity": "critical",
       "title": "Untrusted GitHub event field interpolated into run:",
@@ -91,7 +91,7 @@
       "detectability": "grep"
     },
     {
-      "id": "hook-fetches-remote-then-runs",
+      "id": "hook-fetches-then-executes",
       "category": "claude-ext",
       "severity": "critical",
       "title": "Hook / skill fetches remote code and executes it",
@@ -102,7 +102,7 @@
       "detectability": "grep"
     },
     {
-      "id": "hook-fetches-remote-then-runs",
+      "id": "hook-fetches-then-executes",
       "category": "claude-ext",
       "severity": "critical",
       "title": "Hook / skill fetches remote code and executes it",
@@ -113,7 +113,7 @@
       "detectability": "grep"
     },
     {
-      "id": "firebase-rules-open",
+      "id": "firebase-rules-open-or-auth-only",
       "category": "baas",
       "severity": "critical",
       "title": "Firebase security rule allows anyone to read/write",
@@ -124,7 +124,7 @@
       "detectability": "config"
     },
     {
-      "id": "firebase-rules-open",
+      "id": "firebase-rules-open-or-auth-only",
       "category": "baas",
       "severity": "critical",
       "title": "Firebase security rule allows anyone to read/write",
@@ -135,7 +135,7 @@
       "detectability": "config"
     },
     {
-      "id": "hook-exfiltrates-secrets",
+      "id": "hook-exfiltrates-env-or-credentials",
       "category": "claude-ext",
       "severity": "critical",
       "title": "Hook reads secrets/dotfiles and sends them out",
@@ -146,7 +146,7 @@
       "detectability": "grep"
     },
     {
-      "id": "hook-fetches-remote-then-runs",
+      "id": "hook-fetches-then-executes",
       "category": "claude-ext",
       "severity": "critical",
       "title": "Hook / skill fetches remote code and executes it",
@@ -168,7 +168,7 @@
       "detectability": "config"
     },
     {
-      "id": "mcp-tool-shells-out",
+      "id": "mcp-tool-shell-passthrough",
       "category": "mcp",
       "severity": "critical",
       "title": "MCP tool passes its argument into a shell / eval",
@@ -179,7 +179,7 @@
       "detectability": "trace"
     },
     {
-      "id": "jwt-alg-none",
+      "id": "jwt-alg-none-or-confusion",
       "category": "auth",
       "severity": "critical",
       "title": "JWT alg 'none' or unrestricted algorithms accepted",
@@ -190,7 +190,7 @@
       "detectability": "grep"
     },
     {
-      "id": "hook-fetches-remote-then-runs",
+      "id": "hook-fetches-then-executes",
       "category": "claude-ext",
       "severity": "critical",
       "title": "Hook / skill fetches remote code and executes it",
@@ -377,7 +377,7 @@
       "detectability": "grep"
     },
     {
-      "id": "jwt-signing-secret-exposed",
+      "id": "jwt-or-signing-secret-weak-or-committed",
       "category": "secrets",
       "severity": "critical",
       "title": "JWT signing secret hardcoded",
@@ -465,7 +465,7 @@
       "detectability": "grep"
     },
     {
-      "id": "private-key-block",
+      "id": "private-key-file-committed",
       "category": "secrets",
       "severity": "critical",
       "title": "Private key embedded in source",
@@ -498,7 +498,7 @@
       "detectability": "grep"
     },
     {
-      "id": "unauthenticated-network-mcp",
+      "id": "mcp-unauthenticated-network-server",
       "category": "mcp",
       "severity": "critical",
       "title": "MCP server listens on the network with no auth",
@@ -520,7 +520,7 @@
       "detectability": "config"
     },
     {
-      "id": "command-allowed-tools-wildcard",
+      "id": "command-allowed-tools-bash-wildcard",
       "category": "claude-ext",
       "severity": "high",
       "title": "Slash command / agent grants unrestricted tools",
@@ -531,7 +531,7 @@
       "detectability": "config"
     },
     {
-      "id": "prompt-injection-in-instructions",
+      "id": "prompt-injection-hidden-instructions-in-skill",
       "category": "claude-ext",
       "severity": "high",
       "title": "Hidden / override instructions in a skill, agent, or command file",
@@ -564,7 +564,7 @@
       "detectability": "grep"
     },
     {
-      "id": "hardcoded-admin-check",
+      "id": "hardcoded-or-guessable-admin-key",
       "category": "auth",
       "severity": "high",
       "title": "Admin / auth gate compared against a hardcoded value",
@@ -575,7 +575,7 @@
       "detectability": "grep"
     },
     {
-      "id": "hardcoded-admin-check",
+      "id": "hardcoded-or-guessable-admin-key",
       "category": "auth",
       "severity": "high",
       "title": "Admin / auth gate compared against a hardcoded value",
@@ -586,7 +586,7 @@
       "detectability": "grep"
     },
     {
-      "id": "cors-wildcard-credentials",
+      "id": "cors-wildcard-on-sensitive",
       "category": "web",
       "severity": "high",
       "title": "CORS allows any origin (with or without credentials)",
@@ -597,7 +597,7 @@
       "detectability": "grep"
     },
     {
-      "id": "weak-password-hashing",
+      "id": "plaintext-or-weak-password-hash",
       "category": "cryptography-tokens-randomness",
       "severity": "high",
       "title": "Password hashed with a fast/broken algorithm",
@@ -608,7 +608,7 @@
       "detectability": "grep"
     },
     {
-      "id": "ecb-mode-cipher",
+      "id": "ecb-mode-or-unauthenticated-cipher",
       "category": "cryptography-tokens-randomness",
       "severity": "high",
       "title": "AES-ECB or unauthenticated cipher mode",
@@ -674,7 +674,7 @@
       "detectability": "config"
     },
     {
-      "id": "unpinned-github-action",
+      "id": "unpinned-github-actions-mutable-ref",
       "category": "cicd",
       "severity": "high",
       "title": "Third-party GitHub Action pinned to a mutable ref",
@@ -685,7 +685,7 @@
       "detectability": "config"
     },
     {
-      "id": "curl-pipe-shell",
+      "id": "curl-bash-install-instructions",
       "category": "supply-chain",
       "severity": "high",
       "title": "curl | sh remote-execution install step",
@@ -696,7 +696,7 @@
       "detectability": "grep"
     },
     {
-      "id": "mcp-config-points-remote",
+      "id": "plugin-mcp-remote-or-secret-forwarding",
       "category": "claude-ext",
       "severity": "high",
       "title": "MCP config / plugin points at an unpinned remote server",
@@ -707,7 +707,7 @@
       "detectability": "config"
     },
     {
-      "id": "secret-in-mcp-config",
+      "id": "secret-in-mcp-or-plugin-manifest",
       "category": "claude-ext",
       "severity": "high",
       "title": "Secret hardcoded in MCP / plugin config",
@@ -729,7 +729,7 @@
       "detectability": "config"
     },
     {
-      "id": "settings-widens-permissions",
+      "id": "settings-json-widens-permissions",
       "category": "claude-ext",
       "severity": "high",
       "title": "settings.json widens permissions / auto-approves dangerous tools",
@@ -773,7 +773,7 @@
       "detectability": "config"
     },
     {
-      "id": "curl-pipe-shell",
+      "id": "curl-bash-install-instructions",
       "category": "supply-chain",
       "severity": "high",
       "title": "curl | sh remote-execution install step",
@@ -817,7 +817,7 @@
       "detectability": "grep"
     },
     {
-      "id": "curl-pipe-shell",
+      "id": "curl-bash-install-instructions",
       "category": "supply-chain",
       "severity": "high",
       "title": "curl | sh remote-execution install step",
@@ -839,7 +839,7 @@
       "detectability": "config"
     },
     {
-      "id": "electron-insecure-webpreferences",
+      "id": "electron-nodeintegration-no-contextisolation",
       "category": "desktop-and-extensions",
       "severity": "high",
       "title": "Electron webPreferences disable the security model",
@@ -850,7 +850,7 @@
       "detectability": "grep"
     },
     {
-      "id": "electron-insecure-webpreferences",
+      "id": "electron-nodeintegration-no-contextisolation",
       "category": "desktop-and-extensions",
       "severity": "high",
       "title": "Electron webPreferences disable the security model",
@@ -861,7 +861,7 @@
       "detectability": "grep"
     },
     {
-      "id": "firebase-rules-test-mode",
+      "id": "firebase-rules-open-or-auth-only",
       "category": "baas",
       "severity": "high",
       "title": "Firebase test-mode rules shipped (time-bomb open access)",
@@ -894,7 +894,7 @@
       "detectability": "grep"
     },
     {
-      "id": "curl-pipe-shell",
+      "id": "curl-bash-install-instructions",
       "category": "supply-chain",
       "severity": "high",
       "title": "curl | sh remote-execution install step",
@@ -905,7 +905,7 @@
       "detectability": "grep"
     },
     {
-      "id": "os-system-injection",
+      "id": "command-injection-shell-string",
       "category": "injection",
       "severity": "high",
       "title": "os.system / subprocess shell=True",
@@ -916,7 +916,7 @@
       "detectability": "grep"
     },
     {
-      "id": "os-system-injection",
+      "id": "command-injection-shell-string",
       "category": "injection",
       "severity": "high",
       "title": "os.system / subprocess shell=True",
@@ -927,7 +927,7 @@
       "detectability": "grep"
     },
     {
-      "id": "yaml-unsafe-load",
+      "id": "unsafe-deserialization",
       "category": "injection",
       "severity": "high",
       "title": "yaml.load without SafeLoader",
@@ -949,7 +949,7 @@
       "detectability": "grep"
     },
     {
-      "id": "eval-injection",
+      "id": "code-injection-dynamic-eval",
       "category": "injection",
       "severity": "high",
       "title": "eval() of dynamic input",
@@ -960,7 +960,7 @@
       "detectability": "grep"
     },
     {
-      "id": "new-function-injection",
+      "id": "code-injection-dynamic-eval",
       "category": "injection",
       "severity": "high",
       "title": "new Function() with dynamic body",
@@ -971,7 +971,7 @@
       "detectability": "grep"
     },
     {
-      "id": "command-injection-exec",
+      "id": "command-injection-shell-string",
       "category": "injection",
       "severity": "high",
       "title": "Shell exec with interpolated input",
@@ -982,7 +982,7 @@
       "detectability": "grep"
     },
     {
-      "id": "command-injection-exec",
+      "id": "command-injection-shell-string",
       "category": "injection",
       "severity": "high",
       "title": "Shell exec with interpolated input",
@@ -993,7 +993,7 @@
       "detectability": "grep"
     },
     {
-      "id": "command-injection-exec",
+      "id": "command-injection-shell-string",
       "category": "injection",
       "severity": "high",
       "title": "Shell exec with interpolated input",
@@ -1026,7 +1026,7 @@
       "detectability": "grep"
     },
     {
-      "id": "jwt-decode-not-verified",
+      "id": "jwt-decode-not-verify",
       "category": "auth",
       "severity": "high",
       "title": "JWT decoded without verifying signature",
@@ -1037,7 +1037,7 @@
       "detectability": "grep"
     },
     {
-      "id": "jwt-decode-not-verified",
+      "id": "jwt-decode-not-verify",
       "category": "auth",
       "severity": "high",
       "title": "JWT decoded without verifying signature",
@@ -1048,7 +1048,7 @@
       "detectability": "grep"
     },
     {
-      "id": "jwt-decode-not-verified",
+      "id": "jwt-decode-not-verify",
       "category": "auth",
       "severity": "high",
       "title": "JWT decoded without verifying signature",
@@ -1059,7 +1059,7 @@
       "detectability": "grep"
     },
     {
-      "id": "ssti-template-render",
+      "id": "ssti-user-template-render",
       "category": "injection",
       "severity": "high",
       "title": "Server-side template rendered from user input",
@@ -1103,7 +1103,7 @@
       "detectability": "config"
     },
     {
-      "id": "android-debuggable-release",
+      "id": "debuggable-build-shipped",
       "category": "mobile-and-privacy",
       "severity": "high",
       "title": "Android app shipped debuggable",
@@ -1114,7 +1114,7 @@
       "detectability": "config"
     },
     {
-      "id": "cleartext-traffic-allowed",
+      "id": "cleartext-http-traffic-allowed",
       "category": "mobile-and-privacy",
       "severity": "high",
       "title": "Mobile app allows cleartext (HTTP) traffic",
@@ -1147,7 +1147,7 @@
       "detectability": "config"
     },
     {
-      "id": "curl-pipe-shell",
+      "id": "curl-bash-install-instructions",
       "category": "supply-chain",
       "severity": "high",
       "title": "curl | sh remote-execution install step",
@@ -1169,7 +1169,7 @@
       "detectability": "config"
     },
     {
-      "id": "generic-secret-assignment",
+      "id": "hardcoded-api-key-literal",
       "category": "secrets",
       "severity": "high",
       "title": "Secret-looking literal assigned in source",
@@ -1180,7 +1180,7 @@
       "detectability": "grep"
     },
     {
-      "id": "generic-secret-assignment",
+      "id": "hardcoded-api-key-literal",
       "category": "secrets",
       "severity": "high",
       "title": "Secret-looking literal assigned in source",
@@ -1191,7 +1191,7 @@
       "detectability": "grep"
     },
     {
-      "id": "generic-secret-assignment",
+      "id": "hardcoded-api-key-literal",
       "category": "secrets",
       "severity": "high",
       "title": "Secret-looking literal assigned in source",
@@ -1202,7 +1202,7 @@
       "detectability": "grep"
     },
     {
-      "id": "generic-secret-assignment",
+      "id": "hardcoded-api-key-literal",
       "category": "secrets",
       "severity": "high",
       "title": "Secret-looking literal assigned in source",
@@ -1213,7 +1213,7 @@
       "detectability": "grep"
     },
     {
-      "id": "tls-verification-disabled",
+      "id": "mcp-tls-verify-disabled",
       "category": "injection",
       "severity": "high",
       "title": "TLS certificate verification disabled",
@@ -1224,7 +1224,7 @@
       "detectability": "grep"
     },
     {
-      "id": "curl-pipe-shell",
+      "id": "curl-bash-install-instructions",
       "category": "supply-chain",
       "severity": "high",
       "title": "curl | sh remote-execution install step",
@@ -1235,7 +1235,7 @@
       "detectability": "grep"
     },
     {
-      "id": "tauri-allowlist-all",
+      "id": "tauri-overbroad-allowlist-scope",
       "category": "desktop-and-extensions",
       "severity": "high",
       "title": "Tauri allowlist grants broad fs/shell access",
@@ -1246,7 +1246,7 @@
       "detectability": "config"
     },
     {
-      "id": "terraform-state-committed",
+      "id": "terraform-state-secrets-committed",
       "category": "secrets",
       "severity": "high",
       "title": "Terraform state committed (often holds plaintext secrets)",
@@ -1257,7 +1257,7 @@
       "detectability": "config"
     },
     {
-      "id": "edge-function-no-auth",
+      "id": "edge-function-verify-jwt-disabled",
       "category": "baas",
       "severity": "high",
       "title": "Serverless / edge function with no auth check",
@@ -1279,7 +1279,7 @@
       "detectability": "grep"
     },
     {
-      "id": "generic-secret-assignment",
+      "id": "hardcoded-api-key-literal",
       "category": "secrets",
       "severity": "high",
       "title": "Secret-looking literal assigned in source",
@@ -1323,7 +1323,7 @@
       "detectability": "grep"
     },
     {
-      "id": "debug-mode-in-prod",
+      "id": "debug-dev-mode-in-prod",
       "category": "web",
       "severity": "medium",
       "title": "Debug mode enabled",
@@ -1334,7 +1334,7 @@
       "detectability": "grep"
     },
     {
-      "id": "insecure-rng-for-tokens",
+      "id": "insecure-rng-for-security-tokens",
       "category": "cryptography-tokens-randomness",
       "severity": "medium",
       "title": "Math.random() used to mint a token/id",
@@ -1345,7 +1345,7 @@
       "detectability": "grep"
     },
     {
-      "id": "token-in-web-or-mobile-storage",
+      "id": "tokens-in-insecure-local-storage",
       "category": "cryptography-tokens-randomness",
       "severity": "medium",
       "title": "Auth token stored in localStorage / AsyncStorage",
@@ -1356,7 +1356,7 @@
       "detectability": "grep"
     },
     {
-      "id": "token-in-web-or-mobile-storage",
+      "id": "tokens-in-insecure-local-storage",
       "category": "cryptography-tokens-randomness",
       "severity": "medium",
       "title": "Auth token stored in localStorage / AsyncStorage",
@@ -1389,7 +1389,7 @@
       "detectability": "grep"
     },
     {
-      "id": "react-dangerously-set-html",
+      "id": "dom-xss-sinks",
       "category": "injection",
       "severity": "medium",
       "title": "dangerouslySetInnerHTML / innerHTML XSS sink",
@@ -1400,7 +1400,7 @@
       "detectability": "grep"
     },
     {
-      "id": "react-dangerously-set-html",
+      "id": "dom-xss-sinks",
       "category": "injection",
       "severity": "medium",
       "title": "dangerouslySetInnerHTML / innerHTML XSS sink",
@@ -1411,7 +1411,7 @@
       "detectability": "grep"
     },
     {
-      "id": "ext-web-accessible-overbroad",
+      "id": "ext-web-accessible-resources-overbroad",
       "category": "desktop-and-extensions",
       "severity": "medium",
       "title": "Extension exposes web_accessible_resources to all sites",
@@ -1444,7 +1444,7 @@
       "detectability": "config"
     },
     {
-      "id": "exposed-source-maps",
+      "id": "secret-in-client-bundle-or-sourcemaps",
       "category": "web",
       "severity": "low",
       "title": "Source maps present in build output",
@@ -1455,7 +1455,7 @@
       "detectability": "config"
     },
     {
-      "id": "android-allowbackup",
+      "id": "android-backup-data-extraction",
       "category": "mobile-and-privacy",
       "severity": "low",
       "title": "Android allowBackup enabled (data extractable via adb)",

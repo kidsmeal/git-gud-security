@@ -14,7 +14,7 @@
   },
   "findings": [
     {
-      "id": "supabase-rls-disabled",
+      "id": "supabase-rls-disabled-public-table",
       "category": "baas",
       "severity": "critical",
       "title": "RLS disabled on a table (public API fully open)",
@@ -25,7 +25,7 @@
       "detectability": "config"
     },
     {
-      "id": "pull-request-target-checkout",
+      "id": "pull-request-target-checkout-untrusted",
       "category": "cicd",
       "severity": "critical",
       "title": "pull_request_target builds untrusted PR code",
@@ -36,7 +36,7 @@
       "detectability": "config"
     },
     {
-      "id": "actions-expression-injection",
+      "id": "actions-expression-injection-run",
       "category": "cicd",
       "severity": "critical",
       "title": "Untrusted GitHub event field interpolated into run:",
@@ -47,7 +47,7 @@
       "detectability": "config"
     },
     {
-      "id": "actions-expression-injection",
+      "id": "actions-expression-injection-run",
       "category": "cicd",
       "severity": "critical",
       "title": "Untrusted GitHub event field interpolated into run:",
@@ -58,7 +58,7 @@
       "detectability": "config"
     },
     {
-      "id": "firebase-rules-open",
+      "id": "firebase-rules-open-or-auth-only",
       "category": "baas",
       "severity": "critical",
       "title": "Firebase security rule allows anyone to read/write",
@@ -69,7 +69,7 @@
       "detectability": "config"
     },
     {
-      "id": "firebase-rules-open",
+      "id": "firebase-rules-open-or-auth-only",
       "category": "baas",
       "severity": "critical",
       "title": "Firebase security rule allows anyone to read/write",
@@ -113,7 +113,7 @@
       "detectability": "config"
     },
     {
-      "id": "command-allowed-tools-wildcard",
+      "id": "command-allowed-tools-bash-wildcard",
       "category": "claude-ext",
       "severity": "high",
       "title": "Slash command / agent grants unrestricted tools",
@@ -157,7 +157,7 @@
       "detectability": "config"
     },
     {
-      "id": "unpinned-github-action",
+      "id": "unpinned-github-actions-mutable-ref",
       "category": "cicd",
       "severity": "high",
       "title": "Third-party GitHub Action pinned to a mutable ref",
@@ -168,7 +168,7 @@
       "detectability": "config"
     },
     {
-      "id": "mcp-config-points-remote",
+      "id": "plugin-mcp-remote-or-secret-forwarding",
       "category": "claude-ext",
       "severity": "high",
       "title": "MCP config / plugin points at an unpinned remote server",
@@ -179,7 +179,7 @@
       "detectability": "config"
     },
     {
-      "id": "secret-in-mcp-config",
+      "id": "secret-in-mcp-or-plugin-manifest",
       "category": "claude-ext",
       "severity": "high",
       "title": "Secret hardcoded in MCP / plugin config",
@@ -201,7 +201,7 @@
       "detectability": "config"
     },
     {
-      "id": "settings-widens-permissions",
+      "id": "settings-json-widens-permissions",
       "category": "claude-ext",
       "severity": "high",
       "title": "settings.json widens permissions / auto-approves dangerous tools",
@@ -278,7 +278,7 @@
       "detectability": "config"
     },
     {
-      "id": "firebase-rules-test-mode",
+      "id": "firebase-rules-open-or-auth-only",
       "category": "baas",
       "severity": "high",
       "title": "Firebase test-mode rules shipped (time-bomb open access)",
@@ -311,7 +311,7 @@
       "detectability": "config"
     },
     {
-      "id": "android-debuggable-release",
+      "id": "debuggable-build-shipped",
       "category": "mobile-and-privacy",
       "severity": "high",
       "title": "Android app shipped debuggable",
@@ -322,7 +322,7 @@
       "detectability": "config"
     },
     {
-      "id": "cleartext-traffic-allowed",
+      "id": "cleartext-http-traffic-allowed",
       "category": "mobile-and-privacy",
       "severity": "high",
       "title": "Mobile app allows cleartext (HTTP) traffic",
@@ -355,7 +355,7 @@
       "detectability": "config"
     },
     {
-      "id": "tauri-allowlist-all",
+      "id": "tauri-overbroad-allowlist-scope",
       "category": "desktop-and-extensions",
       "severity": "high",
       "title": "Tauri allowlist grants broad fs/shell access",
@@ -366,7 +366,7 @@
       "detectability": "config"
     },
     {
-      "id": "terraform-state-committed",
+      "id": "terraform-state-secrets-committed",
       "category": "secrets",
       "severity": "high",
       "title": "Terraform state committed (often holds plaintext secrets)",
@@ -377,7 +377,7 @@
       "detectability": "config"
     },
     {
-      "id": "ext-web-accessible-overbroad",
+      "id": "ext-web-accessible-resources-overbroad",
       "category": "desktop-and-extensions",
       "severity": "medium",
       "title": "Extension exposes web_accessible_resources to all sites",
@@ -410,7 +410,7 @@
       "detectability": "config"
     },
     {
-      "id": "exposed-source-maps",
+      "id": "secret-in-client-bundle-or-sourcemaps",
       "category": "web",
       "severity": "low",
       "title": "Source maps present in build output",
@@ -421,7 +421,7 @@
       "detectability": "config"
     },
     {
-      "id": "android-allowbackup",
+      "id": "android-backup-data-extraction",
       "category": "mobile-and-privacy",
       "severity": "low",
       "title": "Android allowBackup enabled (data extractable via adb)",
