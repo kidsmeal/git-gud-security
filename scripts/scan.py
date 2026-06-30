@@ -34,6 +34,8 @@ import re
 import subprocess
 import sys
 
+import gate
+
 __version__ = "0.2.0"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -530,7 +532,14 @@ def main():
     ap = argparse.ArgumentParser(
         description="Git Gud Security deterministic sweep. Output is CANDIDATE findings "
                     "that need confirmation at file:line before reporting.")
-    ap.add_argument("repo")
+    ap.add_argument("repo", nargs="?", default=None,
+                    help="path to a local repo to scan; omit when using --url")
+    ap.add_argument("--url", default=None, metavar="URL",
+                    help="pre-install gate: fetch an UNTRUSTED skill/MCP/plugin from a git URL "
+                         "(or owner/repo) into isolation, classify it, and scan it before it "
+                         "touches your machine. The target is never executed.")
+    ap.add_argument("--ref", default=None,
+                    help="branch or tag to pin the --url fetch to (default: the repo's HEAD)")
     ap.add_argument("--version", action="version", version=f"git-gud-security {__version__}")
     ap.add_argument("--mode", default="quick", choices=["readme", "quick", "full", "ultra"])
     ap.add_argument("--json", action="store_true", help="(deprecated alias for --format json)")
@@ -559,10 +568,41 @@ def main():
               f"--mode readme or --mode quick.", file=sys.stderr)
         sys.exit(2)
 
-    root = os.path.abspath(args.repo)
-    if not os.path.isdir(root):
-        print(json.dumps({"error": f"not a directory: {root}"}))
-        sys.exit(1)
+    # --url is the pre-install gate: fetch an untrusted target into isolation, classify it,
+    # then scan the isolated checkout. --staged is meaningless against a fresh clone, so it's
+    # rejected up front. The workdir is always cleaned up, success or failure.
+    gate_meta = None
+    gate_workdir = None
+    if args.url:
+        if args.repo:
+            print("git-gud-security: pass either a local path or --url, not both.",
+                  file=sys.stderr)
+            sys.exit(2)
+        if args.staged:
+            print("git-gud-security: --staged scans your working tree; it doesn't apply to a "
+                  "--url fetch.", file=sys.stderr)
+            sys.exit(2)
+        try:
+            url = gate.resolve_url(args.url)
+            print(f"git-gud-security: gate fetch {url}"
+                  f"{(' @ ' + args.ref) if args.ref else ''} (isolated, not executed)",
+                  file=sys.stderr)
+            root, sha, gate_workdir = gate.safe_clone(url, ref=args.ref)
+            artifact = gate.classify(root)
+            gate_meta = {"url": url, "ref": args.ref, "sha": sha,
+                         "artifact": artifact["primary"], "signals": artifact["signals"],
+                         "evidence": artifact["evidence"]}
+        except gate.GateError as e:
+            gate.cleanup(gate_workdir)
+            print(json.dumps({"error": f"gate fetch failed: {e}"}))
+            sys.exit(1)
+    elif args.repo:
+        root = os.path.abspath(args.repo)
+        if not os.path.isdir(root):
+            print(json.dumps({"error": f"not a directory: {root}"}))
+            sys.exit(1)
+    else:
+        ap.error("a repo path or --url is required")
 
     if args.exclude:
         SKIP_DIRS.update(args.exclude)
@@ -620,7 +660,8 @@ def main():
         "tool": "git-gud-security",
         "version": __version__,
         "mode": args.mode,
-        "repo": root.replace("\\", "/"),
+        # For a gate run, name the URL@sha that was vetted, not the throwaway temp path.
+        "repo": gate_meta["url"] if gate_meta else root.replace("\\", "/"),
         "scanned": {"files": files_scanned, "pattern_count": len(patterns)},
         "counts": {
             s: sum(1 for f in findings if f["severity"] == s)
@@ -630,6 +671,12 @@ def main():
         "note": "Scanner output is candidate findings. Confirm each at file:line before "
                 "reporting; drop false positives (comments, tests, docs, safe public keys).",
     }
+    if gate_meta:
+        out["gate"] = gate_meta
+
+    # The findings already carry their snippets, so the isolated checkout is no longer needed.
+    # Delete it before any --fail-on exit so a gate run never leaves a temp clone behind.
+    gate.cleanup(gate_workdir)
     if args.format == "sarif":
         payload = json.dumps(to_sarif(out), indent=2)
     elif args.format == "text":
