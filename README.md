@@ -1,10 +1,12 @@
-# Git Gud Security
+<h1 align="center">Git Gud Security</h1>
 
-[![Tests](https://img.shields.io/github/actions/workflow/status/kidsmeal/git-gud-security/test.yml?branch=main&label=tests)](https://github.com/kidsmeal/git-gud-security/actions/workflows/test.yml)
-[![Release](https://img.shields.io/github/v/release/kidsmeal/git-gud-security)](https://github.com/kidsmeal/git-gud-security/releases)
-[![License: MIT](https://img.shields.io/github/license/kidsmeal/git-gud-security)](LICENSE)
-![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue)
-![No dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
+<p align="center"><em>Simple security for solo devs building with AI. Protect yourself and protect others.</em></p>
+
+<p align="center">
+  <a href="https://github.com/kidsmeal/git-gud-security/releases"><img src="https://img.shields.io/github/v/release/kidsmeal/git-gud-security" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/kidsmeal/git-gud-security" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/python-3.8%2B-blue" alt="Python 3.8+">
+</p>
 
 A free security tool for solo AI devs: check the skills, MCP servers, agents, and apps you build before you ship them, without paying for a service. No account, no subscription. The fast scan runs entirely on your machine.
 
