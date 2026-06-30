@@ -73,7 +73,7 @@ Flags for hooking into a workflow:
 
 ## Pre-commit hook
 
-Scan staged files on every commit and block on high+ findings. Add to `.pre-commit-config.yaml`:
+Scan staged files on every commit and block on high+ findings. Needs the [pre-commit](https://pre-commit.com) framework (`pip install pre-commit` or `pipx install pre-commit`). Add to `.pre-commit-config.yaml`:
 
 ```yaml
 repos:
