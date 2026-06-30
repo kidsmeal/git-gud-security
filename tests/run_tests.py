@@ -491,6 +491,184 @@ def test_counts_match():
             print(f"  WARN: couldn't find check count in {doc}")
 
 
+import gate  # noqa: E402  (the pre-install gate's fetch + classify)
+
+
+def test_gate_resolve_url():
+    """resolve_url must accept https/git URLs and owner/repo shorthand, and refuse every
+    transport that can run or read a local resource (ext::, file://, ssh, scp-style, bare path).
+    The protocol allowlist is the gate's single most important fetch hardening."""
+    global failed
+    print("\n--- gate: URL resolution + protocol refusal ---")
+    ok = [("kidsmeal/git-gud-security", "https://github.com/kidsmeal/git-gud-security"),
+          ("https://github.com/a/b.git", "https://github.com/a/b.git")]
+    bad = ["ext::sh -c whoami", "file:///etc/passwd", "git@github.com:a/b",
+           "ssh://host/x", "../local/path", ""]
+    problems = []
+    for spec, want in ok:
+        try:
+            got = gate.resolve_url(spec)
+            if got != want:
+                problems.append(f"{spec!r} -> {got!r}, wanted {want!r}")
+        except gate.GateError as e:
+            problems.append(f"{spec!r} wrongly refused: {e}")
+    for spec in bad:
+        try:
+            gate.resolve_url(spec)
+            problems.append(f"LEAK: accepted dangerous target {spec!r}")
+        except gate.GateError:
+            pass
+    if problems:
+        failed = True
+        print("  FAIL: " + "; ".join(problems))
+    else:
+        print(f"  PASS: {len(ok)} accepted, {len(bad)} dangerous targets refused")
+
+
+def test_gate_classify():
+    """classify must name the artifact from on-disk signals. Skill fixtures -> skill; a built
+    temp mcp/plugin/app -> the matching kind. Wrong classification points the gate at the
+    wrong check categories."""
+    global failed
+    print("\n--- gate: artifact classification ---")
+    import tempfile, shutil
+    cases = []
+    cases.append((os.path.join(FIXTURES, "gate-malicious-skill"), "skill"))
+    cases.append((os.path.join(FIXTURES, "gate-clean-skill"), "skill"))
+    tmps = []
+    try:
+        d = tempfile.mkdtemp(prefix="ggs-cls-"); tmps.append(d)
+        open(os.path.join(d, "mcp.json"), "w").write("{}")
+        cases.append((d, "mcp"))
+        d = tempfile.mkdtemp(prefix="ggs-cls-"); tmps.append(d)
+        os.makedirs(os.path.join(d, ".claude-plugin"))
+        cases.append((d, "plugin"))
+        d = tempfile.mkdtemp(prefix="ggs-cls-"); tmps.append(d)
+        open(os.path.join(d, "index.js"), "w").write("console.log(1)")
+        cases.append((d, "app"))
+        problems = []
+        for path, want in cases:
+            got = gate.classify(path)["primary"]
+            if got != want:
+                problems.append(f"{os.path.basename(path)} -> {got}, wanted {want}")
+        if problems:
+            failed = True
+            print("  FAIL: " + "; ".join(problems))
+        else:
+            print(f"  PASS: {len(cases)} artifacts classified correctly")
+    finally:
+        for d in tmps:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+def test_gate_safe_clone():
+    """safe_clone must fetch a pinned checkout, return its SHA, leave no temp dir behind, and
+    enforce the size ceiling. Uses a local fixture repo over file:// (test-only protocol
+    widening); production callers never widen past https/git."""
+    global failed
+    print("\n--- gate: hardened clone (sha, size cap, cleanup) ---")
+    import tempfile, shutil, glob
+    src = tempfile.mkdtemp(prefix="ggs-src-")
+    try:
+        def git(*a):
+            return subprocess.run(["git", "-C", src, *a], capture_output=True, text=True)
+        if git("init", "-q").returncode != 0:
+            print("  SKIP: git unavailable")
+            shutil.rmtree(src, ignore_errors=True)
+            return
+        git("config", "user.email", "t@t.co"); git("config", "user.name", "t")
+        open(os.path.join(src, "SKILL.md"), "w").write("---\nname: x\n---\n")
+        git("add", "-A"); git("commit", "-q", "-m", "init")
+        url = "file://" + src.replace("\\", "/")
+        problems = []
+
+        repo_dir, sha, work = gate.safe_clone(url, allow_protocols=("file",))
+        if not (len(sha) == 40 and gate.classify(repo_dir)["primary"] == "skill"):
+            problems.append(f"clone returned sha={sha!r}, classify off")
+        gate.cleanup(work)
+        if os.path.exists(work):
+            problems.append("workdir not cleaned up after cleanup()")
+
+        # size ceiling: a 1-byte cap must refuse and leave nothing behind.
+        before = set(glob.glob(os.path.join(tempfile.gettempdir(), "ggs-gate-*")))
+        try:
+            gate.safe_clone(url, max_bytes=1, allow_protocols=("file",))
+            problems.append("size cap not enforced")
+        except gate.GateError:
+            pass
+        after = set(glob.glob(os.path.join(tempfile.gettempdir(), "ggs-gate-*")))
+        if after - before:
+            problems.append("size-cap refusal stranded a temp dir")
+
+        # defense in depth: even if an ext:: URL reached safe_clone, the protocol allowlist
+        # (https/git only) must make git refuse it rather than run the command.
+        try:
+            gate.safe_clone("ext::sh -c touch\\ pwned", allow_protocols=("https", "git"))
+            problems.append("ext:: URL was not refused by the clone")
+        except gate.GateError:
+            pass
+
+        if problems:
+            failed = True
+            print("  FAIL: " + "; ".join(problems))
+        else:
+            print("  PASS: pinned sha, size cap enforced, no temp dirs stranded, ext:: refused")
+    finally:
+        gate._rmtree(src)
+
+
+def test_gate_verdict():
+    """The three-level verdict keys on install-time risk: a critical/high that fires on load
+    blocks; a non-install-time finding (their leaked key) is advisory; nothing is clean."""
+    global failed
+    print("\n--- gate: verdict thresholds ---")
+    def mk(sev, it):
+        return {"severity": sev, "install_time": it}
+    cases = [
+        ([mk("critical", True)], "DO NOT INSTALL"),
+        ([mk("high", True)], "DO NOT INSTALL"),
+        ([mk("critical", False)], "REVIEW FIRST"),   # real, but not install-time
+        ([mk("medium", True)], "REVIEW FIRST"),       # install-time but below block threshold
+        ([], "LOOKS CLEAN"),
+    ]
+    problems = []
+    for findings, want in cases:
+        got = scan.gate_verdict(findings)
+        if got != want:
+            problems.append(f"{findings} -> {got}, wanted {want}")
+    if problems:
+        failed = True
+        print("  FAIL: " + "; ".join(problems))
+    else:
+        print(f"  PASS: all {len(cases)} verdict thresholds correct")
+
+
+def test_gate_format():
+    """End to end through the CLI: a malicious skill fixture must render DO NOT INSTALL with the
+    exfil hook under INSTALL-TIME RISKS; a clean skill must render LOOKS CLEAN. Proves
+    install_time stamping + the gate formatter wire together on real scanned findings."""
+    global failed
+    print("\n--- gate: --format gate end to end ---")
+    problems = []
+    mal = subprocess.run([sys.executable, SCAN_PY,
+                          os.path.join(FIXTURES, "gate-malicious-skill"), "--format", "gate"],
+                         capture_output=True, text=True)
+    if "DO NOT INSTALL" not in mal.stdout:
+        problems.append("malicious skill did not render DO NOT INSTALL")
+    if "INSTALL-TIME RISKS" not in mal.stdout or "hook-exfiltrates-env-or-credentials" not in mal.stdout:
+        problems.append("exfil hook not surfaced as an install-time risk")
+    clean = subprocess.run([sys.executable, SCAN_PY,
+                            os.path.join(FIXTURES, "gate-clean-skill"), "--format", "gate"],
+                           capture_output=True, text=True)
+    if "LOOKS CLEAN" not in clean.stdout:
+        problems.append("clean skill did not render LOOKS CLEAN")
+    if problems:
+        failed = True
+        print("  FAIL: " + "; ".join(problems))
+    else:
+        print("  PASS: malicious -> DO NOT INSTALL (install-time), clean -> LOOKS CLEAN")
+
+
 if __name__ == "__main__":
     if UPDATE:
         # Only regenerate the goldens; skip assertions.
@@ -513,6 +691,11 @@ if __name__ == "__main__":
     test_fail_on_exit_code()
     test_staged_scope()
     test_action_manifest()
+    test_gate_resolve_url()
+    test_gate_classify()
+    test_gate_safe_clone()
+    test_gate_verdict()
+    test_gate_format()
     test_findings_exact("quick")
     test_findings_exact("readme")
     test_false_positives("quick")
