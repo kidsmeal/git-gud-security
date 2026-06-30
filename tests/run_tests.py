@@ -251,10 +251,12 @@ def test_full_ultra_route_to_skill():
 
 
 def test_sarif_output():
-    """--format sarif must emit valid SARIF 2.1.0: one result per finding, every result
-    carrying a ruleId and a 1-based location. This is the GitHub code-scanning contract."""
+    """--format sarif must emit valid SARIF 2.1.0 with one run PER ENGINE (deterministic vs
+    llm), each tagged with an automationDetails.id so GitHub gates them separately. Results
+    summed across runs must equal the finding count; every result carries a ruleId, a 1-based
+    location, and an engine that matches the run it's in."""
     global failed
-    print("\n--- SARIF output ---")
+    print("\n--- SARIF output (per-engine runs) ---")
     tp = os.path.join(FIXTURES, "true-positives")
     r = subprocess.run([sys.executable, SCAN_PY, tp, "--mode", "quick", "--format", "sarif"],
                        capture_output=True, text=True)
@@ -268,30 +270,40 @@ def test_sarif_output():
         failed = True
         print(f"  FAIL: not valid JSON: {e}")
         return
-    # cross-check finding count against the json format on the same fixtures
     _, jdoc = run_scan(tp, "quick")
     n_findings = len(jdoc["findings"])
-    run = doc.get("runs", [{}])[0]
-    results = run.get("results", [])
+    runs = doc.get("runs", [])
     problems = []
     if doc.get("version") != "2.1.0":
         problems.append(f"version={doc.get('version')} (want 2.1.0)")
-    if len(results) != n_findings:
-        problems.append(f"{len(results)} results vs {n_findings} findings")
-    for res in results:
-        if not res.get("ruleId"):
-            problems.append("a result has no ruleId"); break
-        line = res["locations"][0]["physicalLocation"]["region"]["startLine"]
-        if line < 1:
-            problems.append(f"startLine {line} < 1 (invalid SARIF region)"); break
-    if not run.get("tool", {}).get("driver", {}).get("rules"):
-        problems.append("no rules in tool.driver")
+    total_results = sum(len(run.get("results", [])) for run in runs)
+    if total_results != n_findings:
+        problems.append(f"{total_results} results across runs vs {n_findings} findings")
+    seen_engines = set()
+    for run in runs:
+        engine = run.get("properties", {}).get("engine")
+        seen_engines.add(engine)
+        if run.get("automationDetails", {}).get("id") != f"git-gud-security/{engine}":
+            problems.append(f"run automationDetails.id wrong for engine {engine}")
+        if run.get("results") and not run.get("tool", {}).get("driver", {}).get("rules"):
+            problems.append(f"engine {engine}: results but no rules")
+        for res in run.get("results", []):
+            if not res.get("ruleId"):
+                problems.append(f"engine {engine}: a result has no ruleId"); break
+            if res.get("properties", {}).get("engine") != engine:
+                problems.append(f"engine {engine}: result tagged a different engine"); break
+            line = res["locations"][0]["physicalLocation"]["region"]["startLine"]
+            if line < 1:
+                problems.append(f"engine {engine}: startLine {line} < 1"); break
+    # The standalone script only produces deterministic findings, so only that run should exist.
+    if seen_engines - {"deterministic"}:
+        problems.append(f"unexpected engine run(s) from the script: {seen_engines}")
     if problems:
         failed = True
         print(f"  FAIL: {'; '.join(problems)}")
     else:
-        print(f"  PASS: valid SARIF, {len(results)} results, "
-              f"{len(run['tool']['driver']['rules'])} rules")
+        print(f"  PASS: valid SARIF, {len(runs)} run(s) {sorted(seen_engines)}, "
+              f"{total_results} results total")
 
 
 def test_fail_on_exit_code():

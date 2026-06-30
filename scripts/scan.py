@@ -408,12 +408,31 @@ SEV_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 _SARIF_LEVEL = {"critical": "error", "high": "error", "medium": "warning", "low": "note"}
 _SECURITY_SEVERITY = {"critical": "9.5", "high": "8.0", "medium": "5.0", "low": "2.0"}
 
+# Which engine produced a finding — set by the producer, not inferred from the check. This
+# script IS the deterministic engine, so everything it emits is `deterministic`, even for a
+# check whose library detectability is `trace` (a couple of trace-tier checks have a sound grep
+# proxy). The skill stamps its dataflow/adversarial findings `llm`. The distinction drives CI
+# policy: deterministic and adversarial findings are high-precision and can hard-fail a build,
+# a single-pass LLM finding is a warning until escalated.
+ENGINE_ORDER = ("deterministic", "llm")
+# Fallback only: classify by detectability tier when a finding arrives without an explicit
+# engine stamp (e.g. findings fed in from elsewhere). The producer's stamp always wins.
+DETERMINISTIC_TIERS = {"readme", "config", "grep"}
 
-def to_sarif(out):
-    """Render the result as SARIF 2.1.0 so it drops into GitHub code scanning (the Security
-    tab and inline PR annotations) with no glue. One rule per distinct finding id."""
-    findings = out["findings"]
+
+def engine_of(finding):
+    eng = finding.get("engine")
+    if eng:
+        return eng
+    return "deterministic" if finding.get("detectability") in DETERMINISTIC_TIERS else "llm"
+
+
+def _sarif_run(engine, findings, version):
+    """One SARIF run for a single engine: its own tool.driver, its own rules, and an
+    automationDetails.id so GitHub renders it as a distinct analysis the consumer can gate
+    separately (fail on deterministic, warn on llm)."""
     rules = {}
+    results = []
     for f in findings:
         rid = f["id"]
         if rid not in rules:
@@ -425,17 +444,16 @@ def to_sarif(out):
                 "properties": {
                     "category": f.get("category", ""),
                     "detectability": f.get("detectability", ""),
+                    "engine": engine,
                     "security-severity": _SECURITY_SEVERITY.get(f["severity"], "5.0"),
                 },
             }
-    results = []
-    for f in findings:
-        msg = f.get("title") or f["id"]
+        msg = f.get("title") or rid
         if f.get("fix"):
             msg = f"{msg}. Fix: {f['fix']}"
         line = f.get("line") or 0
         results.append({
-            "ruleId": f["id"],
+            "ruleId": rid,
             "level": _SARIF_LEVEL.get(f["severity"], "warning"),
             "message": {"text": msg},
             "locations": [{
@@ -448,21 +466,43 @@ def to_sarif(out):
             "properties": {
                 "severity": f["severity"],
                 "detectability": f.get("detectability", ""),
+                "engine": engine,
                 "inferred": bool(f.get("inferred")),
             },
         })
     return {
+        "tool": {"driver": {
+            "name": "git-gud-security",
+            "informationUri": "https://github.com/kidsmeal/git-gud-security",
+            "version": version,
+            "rules": list(rules.values()),
+        }},
+        # GitHub keys analyses off this id, so the two engines show up as separate categories.
+        "automationDetails": {"id": f"git-gud-security/{engine}"},
+        "properties": {"engine": engine},
+        "results": results,
+    }
+
+
+def to_sarif(out):
+    """Render SARIF 2.1.0 for GitHub code scanning, one run per engine (deterministic vs llm).
+    Keeping them as separate runs lets CI gate them independently instead of parsing a property
+    off every result. The standalone script only ever produces deterministic findings, so today
+    that's a single run; the skill's trace/adversarial findings slot in as the llm run."""
+    findings = out["findings"]
+    version = out.get("version", "")
+    runs = []
+    for engine in ENGINE_ORDER:
+        eng_findings = [f for f in findings if engine_of(f) == engine]
+        if eng_findings:
+            runs.append(_sarif_run(engine, eng_findings, version))
+    if not runs:
+        # No findings at all: still emit one valid, empty deterministic run.
+        runs.append(_sarif_run("deterministic", [], version))
+    return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
-        "runs": [{
-            "tool": {"driver": {
-                "name": "git-gud-security",
-                "informationUri": "https://github.com/kidsmeal/git-gud-security",
-                "version": out.get("version", ""),
-                "rules": list(rules.values()),
-            }},
-            "results": results,
-        }],
+        "runs": runs,
     }
 
 
@@ -569,6 +609,12 @@ def main():
     findings = content_findings + name_findings + env_findings
     sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     findings.sort(key=lambda f: (sev_order.get(f["severity"], 9), f["file"], f["line"]))
+    # This script is the deterministic engine, so stamp every finding it produces accordingly
+    # (the skill stamps its trace/adversarial findings `llm`). Exposed in JSON and split into
+    # per-engine runs in SARIF. Note: a finding can be deterministic-engine yet carry a
+    # `trace` detectability — the tier describes the check, the engine describes who fired it.
+    for f in findings:
+        f["engine"] = "deterministic"
 
     out = {
         "tool": "git-gud-security",

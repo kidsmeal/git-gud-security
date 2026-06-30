@@ -95,6 +95,8 @@ python scripts/scan.py . --mode quick --format sarif --out ggs.sarif
 # then upload ggs.sarif via github/codeql-action/upload-sarif
 ```
 
+SARIF is split into one **run per engine** — `deterministic` (this script) and `llm` (the skill's dataflow/adversarial findings) — each with its own `automationDetails.id`, so GitHub renders them as separate analyses and you can gate CI on each independently (hard-fail deterministic, warn on single-pass llm). Every finding also carries an `engine` field in the JSON output. The standalone script only produces deterministic findings, so on its own it emits a single run.
+
 ## Check library
 
 [`references/checks.md`](references/checks.md) has the full library. [`references/readme-redflags.md`](references/readme-redflags.md) is the fast lookup for readme mode.

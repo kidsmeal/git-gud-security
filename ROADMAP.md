@@ -39,7 +39,24 @@ ends in a slow, false-positive-spewing tool nobody runs.
 - **0.1.x** — deterministic standalone sweep (`readme`/`quick`), 332-check library across 19
   categories, 80 patterns, fixture-backed tests + CI, redaction, severity sync.
 - **0.2.0** — pre-commit hook (`.pre-commit-hooks.yaml`), `--staged` fast path, `--fail-on`
-  severity gate, SARIF 2.1.0 output for GitHub code scanning, terse `text` format.
+  severity gate, SARIF 2.1.0 output for GitHub code scanning (split into per-engine runs,
+  see below), terse `text` format.
+
+## Decision: deterministic and LLM findings are separate SARIF runs
+
+Findings carry an `engine` — `deterministic` (the script: secrets, patterns, config, confirmed
+at the source line) or `llm` (the skill: dataflow tracing and adversarial verification). SARIF
+emits one **run** per engine, each with its own `automationDetails.id`
+(`git-gud-security/deterministic`, `git-gud-security/llm`), so GitHub shows them as distinct
+analyses and a consumer can set different CI policy per engine without parsing a property off
+every result. The engine is who *produced* the finding, not the check's `detectability` tier —
+a trace-tier check with a grep proxy still emits as deterministic when the script fires it.
+
+The recommended gate, given the precision difference: hard-fail CI on `deterministic` and on
+adversarially-verified `llm` findings; treat single-pass `llm` findings as warnings until
+escalated. The script emits only the deterministic run today; the `llm` run lights up when the
+skill gains SARIF output (a near-term item — it's the same `_sarif_run` builder, fed the skill's
+findings stamped `engine: "llm"`).
 
 ## Next
 

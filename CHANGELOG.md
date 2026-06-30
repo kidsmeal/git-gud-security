@@ -27,6 +27,12 @@ unaffected.
   `security-severity` set) for the GitHub Security tab and inline PR annotations; `text` is
   a terse human summary for the pre-commit path. `json` stays the default; `--json` is kept
   as an alias.
+- **Per-engine SARIF runs.** SARIF output is split into one run per engine — `deterministic`
+  (this script) and `llm` (the skill's dataflow/adversarial findings) — each with its own
+  `automationDetails.id` (`git-gud-security/deterministic`, `git-gud-security/llm`), so GitHub
+  renders them as distinct analyses and CI can gate them independently (hard-fail deterministic,
+  warn on single-pass llm). Every finding now carries an `engine` field in JSON too. The
+  standalone script only produces deterministic findings, so today that's a single run.
 - **`ROADMAP.md`** — direction and the deterministic-vs-LLM architectural line.
 
 ### Tests
