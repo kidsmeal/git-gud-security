@@ -194,6 +194,33 @@ def staged_files(root):
     return out
 
 
+def diff_files(root, ref):
+    """Absolute paths of files that differ from `ref` (added/copied/modified), via git. The CI
+    adoption path: scan only what a branch/PR changed against its base, so an established repo
+    isn't judged on its whole history — a new finding in the diff still fails, old ones aren't
+    re-litigated. Returns None if git is absent, `root` isn't a work tree, or `ref` is unknown
+    (caller reports the error rather than silently scanning everything). Empty list = no changes."""
+    try:
+        r = subprocess.run(
+            ["git", "-C", root, "diff", "--name-only", "--diff-filter=ACM", "-z", ref],
+            capture_output=True, text=True)
+    except (OSError, ValueError):
+        return None
+    if r.returncode != 0:
+        return None
+    out = []
+    for name in r.stdout.split("\0"):
+        name = name.strip()
+        if not name:
+            continue
+        if set(name.replace("\\", "/").split("/")) & ALWAYS_SKIP:
+            continue
+        p = os.path.join(root, name)
+        if os.path.isfile(p):
+            out.append(p)
+    return out
+
+
 def iter_build_files(root, build_dirs, skip=ALWAYS_SKIP):
     """Yield files living under a build-output dir (incl. nested, e.g. packages/*/dist).
     Prunes `skip` (always-skip + any user --exclude dirs) so excluded parents like tests/
@@ -552,10 +579,17 @@ def to_text(out):
     severity-sorted (the dict is already sorted by main)."""
     findings = out["findings"]
     c = out["counts"]
+    bl = out.get("baseline")
     lines = [f"git-gud-security — {out['mode']} scan · {out['scanned']['files']} files scanned",
              f"  {c['critical']} critical · {c['high']} high · {c['medium']} medium · {c['low']} low"]
+    if bl and bl["suppressed_count"]:
+        lines.append(f"  ({bl['suppressed_count']} suppressed by baseline, not gated)")
+    if bl:
+        for w in bl.get("audit", []):
+            lines.append(f"  ! baseline audit: {w}")
     if not findings:
-        lines.append("  clean (no candidate findings in this mode)")
+        lines.append("  clean (no candidate findings in this mode)"
+                     + (" beyond the baseline" if bl and bl["suppressed_count"] else ""))
         return "\n".join(lines) + "\n"
     lines.append("")
     for f in findings:
@@ -668,12 +702,24 @@ def main():
                          "verdict; the default when --url is used)")
     ap.add_argument("--staged", action="store_true",
                     help="scan only files staged for commit (git diff --cached) — pre-commit fast path")
+    ap.add_argument("--diff", default=None, metavar="REF",
+                    help="scan only files changed against REF (e.g. --diff origin/main) — the CI "
+                         "adoption path: fail only on what a branch/PR changed, not the whole history")
+    ap.add_argument("--baseline", default=None, metavar="FILE",
+                    help="filter out findings enumerated in FILE (an existing-findings snapshot), "
+                         "so a scan reports/gates only on findings NEW since the snapshot. "
+                         "Suppressed findings are still counted and shown, never dropped silently")
+    ap.add_argument("--update-baseline", action="store_true",
+                    help="write the current findings to --baseline as a fresh snapshot (a "
+                         "deliberate act — grandfathering a finding shows up in the file's diff), "
+                         "then exit without gating")
     ap.add_argument("--fail-on", default=None, choices=["critical", "high", "medium", "low"],
                     help="exit nonzero if a finding at or above this severity is present "
                          "(use in a pre-commit hook / CI to block on findings)")
     ap.add_argument("--out", default=None)
-    ap.add_argument("--exclude", nargs="*", default=[], metavar="DIR",
-                    help="additional directories to skip (e.g. --exclude references tests)")
+    ap.add_argument("--exclude", nargs="*", default=[], metavar="DIR|GLOB",
+                    help="directories or path globs to skip (e.g. --exclude references tests "
+                         "scripts/checks.data.json)")
     args = ap.parse_args()
     # --json is the legacy alias and wins if set. Otherwise: a gate (--url) run defaults to the
     # gate verdict; a plain scan defaults to json. An explicit --format always overrides.
@@ -692,9 +738,17 @@ def main():
               f"--mode readme or --mode quick.", file=sys.stderr)
         sys.exit(2)
 
+    # Scope flags are mutually exclusive (each picks the file set differently), and
+    # --update-baseline needs a --baseline target to write.
+    if args.staged and args.diff:
+        ap.error("--staged and --diff pick different file sets; use one")
+    if args.update_baseline and not args.baseline:
+        ap.error("--update-baseline needs --baseline FILE to write to")
+
     # --url is the pre-install gate: fetch an untrusted target into isolation, classify it,
-    # then scan the isolated checkout. --staged is meaningless against a fresh clone, so it's
-    # rejected up front. The workdir is always cleaned up, success or failure.
+    # then scan the isolated checkout. The adoption flags don't apply to a fresh hostile clone —
+    # and critically, the gate must NEVER honor a baseline (a hostile target can't be allowed to
+    # grandfather its own findings). All rejected up front. The workdir is always cleaned up.
     gate_meta = None
     gate_workdir = None
     if args.url:
@@ -702,9 +756,12 @@ def main():
             print("git-gud-security: pass either a local path or --url, not both.",
                   file=sys.stderr)
             sys.exit(2)
-        if args.staged:
-            print("git-gud-security: --staged scans your working tree; it doesn't apply to a "
-                  "--url fetch.", file=sys.stderr)
+        bad = [f for f, on in (("--staged", args.staged), ("--diff", args.diff),
+                               ("--baseline", args.baseline)) if on]
+        if bad:
+            print(f"git-gud-security: {', '.join(bad)} do not apply to a --url gate "
+                  f"(the gate answers fresh and never grandfathers a hostile target's findings).",
+                  file=sys.stderr)
             sys.exit(2)
         try:
             url = gate.resolve_url(args.url)
@@ -741,14 +798,19 @@ def main():
 
     patterns, do_redact = load_patterns()
 
-    # --staged: restrict every tier to the files staged for commit. None means whole-tree
-    # (no --staged, or git unavailable); [] means a clean stage (nothing to scan).
+    # --staged / --diff: restrict every tier to a subset of files. None means whole-tree
+    # (no scope flag, or git unavailable); [] means the scope is empty (nothing to scan).
     scan_files = None
     if args.staged:
         scan_files = staged_files(root)
         if scan_files is None:
             print("git-gud-security: --staged needs a git work tree; scanning the whole repo "
                   "instead.", file=sys.stderr)
+    elif args.diff:
+        scan_files = diff_files(root, args.diff)
+        if scan_files is None:
+            print(f"git-gud-security: --diff {args.diff} needs a git work tree and a valid ref; "
+                  f"scanning the whole repo instead.", file=sys.stderr)
 
     print(f"git-gud-security: {len(patterns)} patterns, mode={args.mode}"
           f"{', staged only' if scan_files is not None else ''}. "
@@ -796,6 +858,33 @@ def main():
         # surfaces these first and the verdict blocks on a critical/high among them.
         f["install_time"] = f.get("category") in it_cats
 
+    # --update-baseline: write the current findings as a fresh snapshot and stop. A deliberate
+    # act — grandfathering a finding lands as a visible line in the baseline file's diff.
+    if args.update_baseline:
+        n = baseline.write_baseline(args.baseline, findings, __version__)
+        print(f"git-gud-security: wrote {n} finding(s) to baseline {args.baseline}. Review the "
+              f"diff — every entry here is grandfathered out of future --fail-on.", file=sys.stderr)
+        sys.exit(0)
+
+    # --baseline: split into NEW (reported + gated) and suppressed (still counted + shown, never
+    # dropped silently). Audit the baseline for entries that grandfather a critical/install-time
+    # finding and surface those loudly.
+    suppressed = []
+    baseline_audit = []
+    if args.baseline:
+        try:
+            loaded = baseline.load(args.baseline)
+        except baseline.BaselineError as e:
+            print(json.dumps({"error": f"baseline error: {e}"}))
+            sys.exit(1)
+        findings, suppressed = baseline.partition(findings, loaded)
+        baseline_audit = baseline.audit(loaded)
+        if suppressed:
+            print(f"git-gud-security: {len(suppressed)} finding(s) suppressed by baseline "
+                  f"{args.baseline} (still shown, not gated).", file=sys.stderr)
+        for w in baseline_audit:
+            print(f"git-gud-security: baseline audit — {w}", file=sys.stderr)
+
     out = {
         "tool": "git-gud-security",
         "version": __version__,
@@ -813,6 +902,11 @@ def main():
     }
     if gate_meta:
         out["gate"] = gate_meta
+    if args.baseline:
+        # Observable suppression: the suppressed findings and any audit warnings ride along in
+        # the output so a consumer can see exactly what the baseline hid and why.
+        out["baseline"] = {"file": args.baseline, "suppressed_count": len(suppressed),
+                           "suppressed": suppressed, "audit": baseline_audit}
 
     # The findings already carry their snippets, so the isolated checkout is no longer needed.
     # Delete it before any --fail-on exit so a gate run never leaves a temp clone behind —
