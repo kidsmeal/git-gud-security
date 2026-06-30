@@ -1,0 +1,7 @@
+# True-positive fixture for Cloudflare Workers secrets-in-vars
+name = "test-worker"
+compatibility_date = "2024-01-01"
+
+[vars]
+API_SECRET = "sk_live_shouldnotbehere1234"
+DATABASE_PASSWORD = "hunter2"

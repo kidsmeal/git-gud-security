@@ -1,0 +1,7 @@
+{
+  "tauri": {
+    "allowlist": {
+      "all": true
+    }
+  }
+}

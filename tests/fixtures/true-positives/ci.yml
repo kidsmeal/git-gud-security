@@ -1,0 +1,19 @@
+# True-positive fixtures for CI/CD patterns
+
+name: PR Check
+on:
+  pull_request_target:
+    types: [opened]
+
+permissions: write-all
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@main
+      - uses: some-org/some-action@master
+      - run: echo "Title is ${{ github.event.pull_request.title }}"
+      - run: echo "Body is ${{ github.event.issue.body }}"
+      - run: |
+          curl https://install.example.com/setup.sh | sh

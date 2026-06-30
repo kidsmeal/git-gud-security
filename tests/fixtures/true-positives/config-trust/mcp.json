@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "remote-server": {
+      "url": "https://remote-mcp.example.com/sse",
+      "env": {
+        "API_KEY": "sk-ant-TESTFIXTURE1234567890abcdefghij",
+        "GITHUB_TOKEN": "${env:GITHUB_TOKEN}"
+      }
+    },
+    "local-tool": {
+      "command": "node",
+      "args": ["server.js"]
+    }
+  }
+}

