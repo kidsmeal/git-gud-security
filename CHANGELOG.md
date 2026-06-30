@@ -4,6 +4,28 @@ All notable changes to Git Gud Security are recorded here. Versioning is
 [SemVer](https://semver.org/). Pre-1.0: behavior and check IDs may still change between
 minor versions.
 
+## [0.4.1] - 2026-06-30
+
+Bug fix and CI hygiene.
+
+### Fixed
+
+- **Gate `owner/repo` shorthand on Linux/macOS.** `scan.py --url owner/repo` (and the skill's
+  "git gud gate owner/repo") wrongly rejected the shorthand on POSIX since 0.3.0: `resolve_url`
+  used `os.sep in spec` to detect local paths, but `os.sep` is `/` on POSIX, so every
+  `owner/repo` was refused. The full `https://` form was unaffected. The shape regex already
+  rejects local paths / scp-style targets, so the buggy check is gone. The test suite (which
+  runs on Linux in CI) now covers the absolute-path / multi-segment / Windows-path reject cases.
+
+### Changed
+
+- **`action.yml` builds `--exclude` as a bash array** (`read -ra`) instead of an unquoted string,
+  so a glob exclude (`scripts/*.json`, a 0.4.0 capability) reaches the scanner literally instead
+  of being shell-expanded against the runner's cwd.
+- The Action-manifest test no longer needs PyYAML, so CI runs it instead of skipping; its
+  expression-injection guard now flags `${{ }}` only inside a `run:` block (env/with/if is safe).
+- README: shields.io badges (CI, release, license, Python, no-deps).
+
 ## [0.4.0] - 2026-06-30
 
 Adoption: drop GGS into an existing repo without drowning in pre-existing findings, and scope CI

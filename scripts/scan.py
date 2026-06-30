@@ -38,7 +38,7 @@ import sys
 import baseline
 import gate
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 

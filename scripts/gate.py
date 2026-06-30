@@ -64,10 +64,11 @@ def resolve_url(spec):
                 f"refusing {proto}:// URL: the gate only fetches over https/git "
                 f"(no ssh/file/ext, which can run or read local resources)")
         return spec
-    # No scheme: must be owner/repo shorthand. Reject scp-style (git@host:path) and bare
-    # paths outright — both are ways to point the clone at something local or non-https.
-    if spec.startswith("git@") or spec.startswith("ssh:") or os.sep in spec or ":" in spec:
-        raise GateError(f"unrecognized target {spec!r}: use a https URL or owner/repo")
+    # No scheme: must be owner/repo shorthand. The regex (single slash, leading alnum, no
+    # backslash/colon/space) already rejects scp-style (git@host:path), local paths (/abs,
+    # ../x, C:\x), and multi-segment paths — so DON'T add an os.sep check here: os.sep is '/'
+    # on POSIX and would wrongly reject every owner/repo. Earlier bug; that's why the gate
+    # shorthand failed on Linux/macOS while passing on Windows.
     if not _OWNER_REPO.match(spec):
         raise GateError(f"unrecognized target {spec!r}: use a https URL or owner/repo")
     return f"https://github.com/{spec}"

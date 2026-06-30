@@ -17,7 +17,7 @@ Built for the AI tooling surface the free scanners ignore (MCP servers, Claude s
 Clone into your skills directory. Pin to a release tag (recommended for a security tool, so you know exactly what's running):
 
 ```bash
-git clone --branch v0.4.0 https://github.com/kidsmeal/git-gud-security ~/.claude/skills/git-gud-security
+git clone --branch v0.4.1 https://github.com/kidsmeal/git-gud-security ~/.claude/skills/git-gud-security
 ```
 
 Or track the latest:
@@ -107,7 +107,7 @@ Scan staged files on every commit and block on high+ findings. Needs the [pre-co
 ```yaml
 repos:
   - repo: https://github.com/kidsmeal/git-gud-security
-    rev: v0.4.0
+    rev: v0.4.1
     hooks:
       - id: git-gud-security        # blocks the commit on high+ findings
       # - id: git-gud-security-warn # or: print findings without blocking
@@ -131,7 +131,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: kidsmeal/git-gud-security@v0.4.0
+      - uses: kidsmeal/git-gud-security@v0.4.1
         # with:
         #   mode: quick            # or readme
         #   exclude: tests vendor  # dirs to skip

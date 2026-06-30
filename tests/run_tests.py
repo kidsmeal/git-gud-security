@@ -648,7 +648,7 @@ def test_gate_resolve_url():
     ok = [("kidsmeal/git-gud-security", "https://github.com/kidsmeal/git-gud-security"),
           ("https://github.com/a/b.git", "https://github.com/a/b.git")]
     bad = ["ext::sh -c whoami", "file:///etc/passwd", "git@github.com:a/b",
-           "ssh://host/x", "../local/path", ""]
+           "ssh://host/x", "../local/path", "/abs/path", "a/b/c", "C:\\x", ""]
     problems = []
     for spec, want in ok:
         try:
