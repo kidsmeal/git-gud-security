@@ -15,7 +15,7 @@
     "android-backup-data-extraction",
     "mobile/AndroidManifest.xml",
     6,
-    "low"
+    "medium"
   ],
   [
     "claude-project-config-clone-open-rce",
@@ -45,13 +45,13 @@
     "code-injection-dynamic-eval",
     "injection.ts",
     3,
-    "high"
+    "critical"
   ],
   [
     "code-injection-dynamic-eval",
     "injection.ts",
     4,
-    "high"
+    "critical"
   ],
   [
     "command-allowed-tools-bash-wildcard",
@@ -63,31 +63,31 @@
     "command-injection-shell-string",
     "injection.py",
     5,
-    "high"
+    "critical"
   ],
   [
     "command-injection-shell-string",
     "injection.py",
     6,
-    "high"
+    "critical"
   ],
   [
     "command-injection-shell-string",
     "injection.ts",
     6,
-    "high"
+    "critical"
   ],
   [
     "command-injection-shell-string",
     "injection.ts",
     7,
-    "high"
+    "critical"
   ],
   [
     "command-injection-shell-string",
     "injection.ts",
     8,
-    "high"
+    "critical"
   ],
   [
     "committed-mcp-config-autolaunch",
@@ -147,19 +147,19 @@
     "db-connection-string-with-password",
     "secrets.ts",
     23,
-    "critical"
+    "high"
   ],
   [
     "db-connection-string-with-password",
     "secrets.ts",
     24,
-    "critical"
+    "high"
   ],
   [
     "debug-dev-mode-in-prod",
     "auth.ts",
     20,
-    "medium"
+    "high"
   ],
   [
     "debuggable-build-shipped",
@@ -177,13 +177,13 @@
     "dom-xss-sinks",
     "injection.ts",
     13,
-    "medium"
+    "high"
   ],
   [
     "dom-xss-sinks",
     "injection.ts",
     14,
-    "medium"
+    "high"
   ],
   [
     "ecb-mode-or-unauthenticated-cipher",
@@ -201,13 +201,13 @@
     "electron-nodeintegration-no-contextisolation",
     "electron.js",
     6,
-    "high"
+    "critical"
   ],
   [
     "electron-nodeintegration-no-contextisolation",
     "electron.js",
     7,
-    "high"
+    "critical"
   ],
   [
     "ext-overbroad-host-permissions",
@@ -243,7 +243,7 @@
     "firebase-rules-open-or-auth-only",
     "firestore.rules",
     13,
-    "high"
+    "critical"
   ],
   [
     "flutter-dotenv-secrets-in-bundle",
@@ -279,6 +279,18 @@
     "hardcoded-api-key-literal",
     "dist/app.bundle.js",
     3,
+    "critical"
+  ],
+  [
+    "hardcoded-api-key-literal",
+    "dist/min.bundle.js",
+    1,
+    "critical"
+  ],
+  [
+    "hardcoded-api-key-literal",
+    "redaction.ts",
+    4,
     "critical"
   ],
   [
@@ -357,43 +369,43 @@
     "hardcoded-api-key-literal",
     "secrets.ts",
     20,
-    "high"
+    "critical"
   ],
   [
     "hardcoded-api-key-literal",
     "secrets.ts",
     26,
-    "high"
+    "critical"
   ],
   [
     "hardcoded-api-key-literal",
     "secrets.ts",
     27,
-    "high"
+    "critical"
   ],
   [
     "hardcoded-api-key-literal",
     "secrets.ts",
     29,
-    "high"
+    "critical"
   ],
   [
     "hardcoded-api-key-literal",
     "wrangler.toml",
     6,
-    "high"
+    "critical"
   ],
   [
     "hardcoded-or-guessable-admin-key",
     "auth.ts",
     8,
-    "high"
+    "critical"
   ],
   [
     "hardcoded-or-guessable-admin-key",
     "auth.ts",
     11,
-    "high"
+    "critical"
   ],
   [
     "hook-exfiltrates-env-or-credentials",
@@ -441,19 +453,19 @@
     "insecure-cookie-flags",
     "auth.ts",
     16,
-    "medium"
+    "high"
   ],
   [
     "insecure-cookie-flags",
     "auth.ts",
     17,
-    "medium"
+    "high"
   ],
   [
     "insecure-rng-for-security-tokens",
     "auth.ts",
     22,
-    "medium"
+    "high"
   ],
   [
     "invisible-unicode-in-instructions",
@@ -471,19 +483,19 @@
     "jwt-decode-not-verify",
     "injection.ts",
     16,
-    "high"
+    "critical"
   ],
   [
     "jwt-decode-not-verify",
     "injection.ts",
     17,
-    "high"
+    "critical"
   ],
   [
     "jwt-decode-not-verify",
     "injection.ts",
     18,
-    "high"
+    "critical"
   ],
   [
     "jwt-or-signing-secret-weak-or-committed",
@@ -549,13 +561,13 @@
     "npm-postinstall-remote-code",
     "package.json",
     4,
-    "high"
+    "critical"
   ],
   [
     "plaintext-or-weak-password-hash",
     "auth.ts",
     30,
-    "high"
+    "critical"
   ],
   [
     "plugin-mcp-remote-or-secret-forwarding",
@@ -633,19 +645,19 @@
     "secret-in-client-bundle-or-sourcemaps",
     "app.js.map",
     0,
-    "low"
+    "critical"
   ],
   [
     "secret-in-client-bundle-or-sourcemaps",
     "dist/app.bundle.js.map",
     0,
-    "low"
+    "critical"
   ],
   [
     "secret-in-mcp-or-plugin-manifest",
     "config-trust/mcp.json",
     6,
-    "high"
+    "critical"
   ],
   [
     "secret-modern-key-prefix-sweep",
@@ -711,7 +723,7 @@
     "service-role-key-in-client",
     "auth.ts",
     4,
-    "high"
+    "critical"
   ],
   [
     "settings-json-widens-permissions",
@@ -723,19 +735,19 @@
     "sql-string-built-query",
     "injection.ts",
     10,
-    "high"
+    "critical"
   ],
   [
     "sql-string-built-query",
     "injection.ts",
     11,
-    "high"
+    "critical"
   ],
   [
     "ssti-user-template-render",
     "injection.ts",
     21,
-    "high"
+    "critical"
   ],
   [
     "supabase-db-side-ssrf-and-search-path",
@@ -753,13 +765,13 @@
     "supabase-rls-policy-using-true",
     "baas.sql",
     5,
-    "high"
+    "critical"
   ],
   [
     "supabase-rls-policy-using-true",
     "baas.sql",
     6,
-    "high"
+    "critical"
   ],
   [
     "tauri-overbroad-allowlist-scope",
@@ -777,13 +789,13 @@
     "tokens-in-insecure-local-storage",
     "auth.ts",
     24,
-    "medium"
+    "high"
   ],
   [
     "tokens-in-insecure-local-storage",
     "auth.ts",
     25,
-    "medium"
+    "high"
   ],
   [
     "unpinned-github-actions-mutable-ref",
@@ -795,13 +807,13 @@
     "unsafe-deserialization",
     "injection.py",
     7,
-    "high"
+    "critical"
   ],
   [
     "unsafe-deserialization",
     "injection.py",
     8,
-    "high"
+    "critical"
   ],
   [
     "user-metadata-authz-client",

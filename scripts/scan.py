@@ -52,8 +52,11 @@ SKIP_EXTS = {
 }
 
 MAX_FILE_BYTES = 2_000_000  # skip files larger than 2MB for content scanning
-MAX_LINE_LEN = 5_000  # cap the slice of any one line we match, so a minified/one-line blob in a
-# hostile repo can't drive catastrophic regex backtracking and hang the scan
+MAX_LINE_LEN = 5_000  # bound the slice any one regex runs against, so a minified/one-line blob
+# in a hostile repo can't drive catastrophic backtracking and hang the scan. Long lines are
+# scanned in overlapping windows of this size (see match_in_line) rather than truncated, so a
+# secret past byte 5000 in a one-line bundle is still found while each match stays bounded.
+LINE_WINDOW_OVERLAP = 256  # window overlap, larger than any token so none is split across a seam
 
 
 def load_patterns():
@@ -119,6 +122,10 @@ _SECRET_RE = re.compile(
     r"|sb_secret_[A-Za-z0-9_-]{20,}|gsk_[A-Za-z0-9]{20,}|hf_[A-Za-z0-9]{20,}"
     r"|r8_[A-Za-z0-9]{20,}|xai-[A-Za-z0-9]{20,}|pplx-[A-Za-z0-9]{32,}"
     r"|npm_[A-Za-z0-9]{36}|sk-svcacct-[A-Za-z0-9_-]{20,}"
+    # SendGrid / Twilio / DigitalOcean: detected by patterns.json but were missing here, so a
+    # token on a line that also matched a non-secret pattern leaked in full. Keep this regex a
+    # superset of every token format the patterns detect (test_scrub_covers_token_formats).
+    r"|SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}|AC[A-Za-z0-9]{32}|dop_v1_[a-f0-9]{64}"
     r"|eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}"
     r"|[a-zA-Z][a-zA-Z0-9+.-]*://[^:@/\s\"']+:[^@/\s\"']+@",
     re.IGNORECASE,
@@ -156,6 +163,24 @@ def rel(root, path):
         return path.replace("\\", "/")
 
 
+def match_in_line(line, pat):
+    """First `_any` hit not suppressed by a `_not` in the same window. Long lines are scanned
+    in overlapping windows so a hit past MAX_LINE_LEN (a key in a one-line minified bundle) is
+    still found, while each regex runs against a bounded window. Returns (match, window) or
+    (None, None)."""
+    if len(line) <= MAX_LINE_LEN:
+        windows = ((0, line),)
+    else:
+        step = MAX_LINE_LEN - LINE_WINDOW_OVERLAP
+        windows = ((s, line[s:s + MAX_LINE_LEN]) for s in range(0, len(line), step))
+    for _, win in windows:
+        for rx in pat["_any"]:
+            m = rx.search(win)
+            if m and not any(nrx.search(win) for nrx in pat["_not"]):
+                return m, win
+    return None, None
+
+
 def scan_content(root, patterns, do_redact, files=None):
     findings = []
     files_scanned = 0
@@ -179,19 +204,15 @@ def scan_content(root, patterns, do_redact, files=None):
         files_scanned += 1
         for pat in applicable:
             for i, line in enumerate(lines, 1):
-                if len(line) > MAX_LINE_LEN:
-                    line = line[:MAX_LINE_LEN]
-                hit = None
-                for rx in pat["_any"]:
-                    m = rx.search(line)
-                    if m:
-                        hit = m
-                        break
+                hit, win = match_in_line(line, pat)
                 if not hit:
                     continue
-                if any(rx.search(line) for rx in pat["_not"]):
-                    continue
-                snippet = line.rstrip()[:200]
+                if len(line) <= MAX_LINE_LEN:
+                    snippet = line.rstrip()[:200]
+                else:
+                    s = max(0, hit.start() - 60)
+                    e = min(len(win), hit.end() + 60)
+                    snippet = ("..." + win[s:e].strip())[:200]
                 if pat.get("secret") and do_redact:
                     snippet = snippet.replace(hit.group(0), redact(hit.group(0)))
                 if do_redact:

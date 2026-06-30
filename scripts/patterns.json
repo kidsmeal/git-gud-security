@@ -69,7 +69,7 @@
     {
       "id": "service-role-key-in-client",
       "category": "secrets",
-      "severity": "high",
+      "severity": "critical",
       "title": "Supabase service_role key referenced in app code",
       "detectability": "grep",
       "include": [
@@ -95,7 +95,7 @@
     {
       "id": "db-connection-string-with-password",
       "category": "secrets",
-      "severity": "critical",
+      "severity": "high",
       "title": "Database connection string with inline password",
       "detectability": "grep",
       "secret": true,
@@ -116,7 +116,7 @@
     {
       "id": "hardcoded-api-key-literal",
       "category": "secrets",
-      "severity": "high",
+      "severity": "critical",
       "title": "Secret-looking literal assigned in source",
       "detectability": "grep",
       "secret": true,
@@ -244,7 +244,7 @@
     {
       "id": "supabase-rls-policy-using-true",
       "category": "baas",
-      "severity": "high",
+      "severity": "critical",
       "title": "RLS policy with a permanently-true condition",
       "detectability": "config",
       "include": [
@@ -278,7 +278,7 @@
     {
       "id": "firebase-rules-open-or-auth-only",
       "category": "baas",
-      "severity": "high",
+      "severity": "critical",
       "title": "Firebase test-mode rules shipped (time-bomb open access)",
       "detectability": "config",
       "include": [
@@ -309,7 +309,7 @@
     {
       "id": "code-injection-dynamic-eval",
       "category": "injection",
-      "severity": "high",
+      "severity": "critical",
       "title": "eval() of dynamic input",
       "detectability": "grep",
       "include": [
@@ -336,7 +336,7 @@
     {
       "id": "code-injection-dynamic-eval",
       "category": "injection",
-      "severity": "high",
+      "severity": "critical",
       "title": "new Function() with dynamic body",
       "detectability": "grep",
       "include": [
@@ -357,7 +357,7 @@
     {
       "id": "command-injection-shell-string",
       "category": "injection",
-      "severity": "high",
+      "severity": "critical",
       "title": "Shell exec with interpolated input",
       "detectability": "grep",
       "include": [
@@ -378,7 +378,7 @@
     {
       "id": "command-injection-shell-string",
       "category": "injection",
-      "severity": "high",
+      "severity": "critical",
       "title": "os.system / subprocess shell=True",
       "detectability": "grep",
       "include": [
@@ -393,7 +393,7 @@
     {
       "id": "sql-string-built-query",
       "category": "injection",
-      "severity": "high",
+      "severity": "critical",
       "title": "SQL built by string interpolation",
       "detectability": "grep",
       "include": [
@@ -421,7 +421,7 @@
     {
       "id": "unsafe-deserialization",
       "category": "injection",
-      "severity": "high",
+      "severity": "critical",
       "title": "yaml.load without SafeLoader",
       "detectability": "grep",
       "include": [
@@ -440,7 +440,7 @@
     {
       "id": "unsafe-deserialization",
       "category": "injection",
-      "severity": "high",
+      "severity": "critical",
       "title": "Unsafe deserialization of untrusted data",
       "detectability": "grep",
       "include": [
@@ -476,7 +476,7 @@
     {
       "id": "dom-xss-sinks",
       "category": "injection",
-      "severity": "medium",
+      "severity": "high",
       "title": "dangerouslySetInnerHTML / innerHTML XSS sink",
       "detectability": "grep",
       "include": [
@@ -499,7 +499,7 @@
     {
       "id": "ssti-user-template-render",
       "category": "injection",
-      "severity": "high",
+      "severity": "critical",
       "title": "Server-side template rendered from user input",
       "detectability": "grep",
       "include": [
@@ -517,7 +517,7 @@
     {
       "id": "jwt-decode-not-verify",
       "category": "auth",
-      "severity": "high",
+      "severity": "critical",
       "title": "JWT decoded without verifying signature",
       "detectability": "grep",
       "include": [
@@ -559,7 +559,7 @@
     {
       "id": "hardcoded-or-guessable-admin-key",
       "category": "auth",
-      "severity": "high",
+      "severity": "critical",
       "title": "Admin / auth gate compared against a hardcoded value",
       "detectability": "grep",
       "include": [
@@ -599,7 +599,7 @@
     {
       "id": "insecure-cookie-flags",
       "category": "web",
-      "severity": "medium",
+      "severity": "high",
       "title": "Session cookie missing HttpOnly / Secure",
       "detectability": "grep",
       "include": [
@@ -615,7 +615,7 @@
     {
       "id": "debug-dev-mode-in-prod",
       "category": "web",
-      "severity": "medium",
+      "severity": "high",
       "title": "Debug mode enabled",
       "detectability": "grep",
       "include": [
@@ -635,7 +635,7 @@
     {
       "id": "secret-in-client-bundle-or-sourcemaps",
       "category": "web",
-      "severity": "low",
+      "severity": "critical",
       "title": "Source maps present in build output",
       "detectability": "config",
       "kind": "filename",
@@ -728,7 +728,7 @@
     {
       "id": "npm-postinstall-remote-code",
       "category": "supply-chain",
-      "severity": "high",
+      "severity": "critical",
       "title": "package.json postinstall runs remote / opaque code",
       "detectability": "config",
       "include": [
@@ -890,7 +890,7 @@
     {
       "id": "secret-in-mcp-or-plugin-manifest",
       "category": "claude-ext",
-      "severity": "high",
+      "severity": "critical",
       "title": "Secret hardcoded in MCP / plugin config",
       "detectability": "config",
       "secret": true,
@@ -949,7 +949,7 @@
     {
       "id": "electron-nodeintegration-no-contextisolation",
       "category": "desktop-and-extensions",
-      "severity": "high",
+      "severity": "critical",
       "title": "Electron webPreferences disable the security model",
       "detectability": "grep",
       "include": [
@@ -1017,7 +1017,7 @@
     {
       "id": "plaintext-or-weak-password-hash",
       "category": "cryptography-tokens-randomness",
-      "severity": "high",
+      "severity": "critical",
       "title": "Password hashed with a fast/broken algorithm",
       "detectability": "grep",
       "include": [
@@ -1049,7 +1049,7 @@
     {
       "id": "insecure-rng-for-security-tokens",
       "category": "cryptography-tokens-randomness",
-      "severity": "medium",
+      "severity": "high",
       "title": "Math.random() used to mint a token/id",
       "detectability": "grep",
       "include": [
@@ -1069,7 +1069,7 @@
     {
       "id": "tokens-in-insecure-local-storage",
       "category": "cryptography-tokens-randomness",
-      "severity": "medium",
+      "severity": "high",
       "title": "Auth token stored in localStorage / AsyncStorage",
       "detectability": "grep",
       "include": [
@@ -1119,7 +1119,7 @@
     {
       "id": "android-backup-data-extraction",
       "category": "mobile-and-privacy",
-      "severity": "low",
+      "severity": "medium",
       "title": "Android allowBackup enabled (data extractable via adb)",
       "detectability": "config",
       "include": [

@@ -15,7 +15,7 @@
     "android-backup-data-extraction",
     "mobile/AndroidManifest.xml",
     6,
-    "low"
+    "medium"
   ],
   [
     "claude-project-config-clone-open-rce",
@@ -105,7 +105,7 @@
     "firebase-rules-open-or-auth-only",
     "firestore.rules",
     13,
-    "high"
+    "critical"
   ],
   [
     "flutter-dotenv-secrets-in-bundle",
@@ -141,7 +141,7 @@
     "npm-postinstall-remote-code",
     "package.json",
     4,
-    "high"
+    "critical"
   ],
   [
     "plugin-mcp-remote-or-secret-forwarding",
@@ -177,13 +177,13 @@
     "secret-in-client-bundle-or-sourcemaps",
     "app.js.map",
     0,
-    "low"
+    "critical"
   ],
   [
     "secret-in-mcp-or-plugin-manifest",
     "config-trust/mcp.json",
     6,
-    "high"
+    "critical"
   ],
   [
     "secrets-in-newer-deploy-config-files",
@@ -219,13 +219,13 @@
     "supabase-rls-policy-using-true",
     "baas.sql",
     5,
-    "high"
+    "critical"
   ],
   [
     "supabase-rls-policy-using-true",
     "baas.sql",
     6,
-    "high"
+    "critical"
   ],
   [
     "tauri-overbroad-allowlist-scope",

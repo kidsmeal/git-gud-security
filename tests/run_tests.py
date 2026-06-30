@@ -91,35 +91,103 @@ def test_findings_exact(mode):
 
 
 def test_secrets_redacted():
-    """A scanner that prints the secrets it finds is itself a leak (SECURITY.md scopes this
-    as a vuln). Assert known fixture secrets never appear verbatim in output, and that
-    redaction actually fired (the redacted marker is present), so the test isn't vacuous."""
+    """A scanner that prints the secrets it finds is itself a leak (SECURITY.md scopes this as
+    a vuln). Discover every secret-format token present in the fixtures, then assert NONE
+    appears verbatim in output. Auto-covers new fixtures, and catches the same-line
+    double-finding leak (one finding redacts, a second prints raw via an incomplete scrub)."""
     global failed
-    print("\n--- secret redaction ---")
-    target = os.path.join(FIXTURES, "true-positives")
-    raw, actual = run_scan(target, "quick")
+    print("\n--- secret redaction (no token in cleartext) ---")
+    tp = os.path.join(FIXTURES, "true-positives")
+    all_files = list(scan.iter_files(tp)) + list(scan.iter_build_files(tp, scan.BUILD_OUTPUT))
+    tokens = set()
+    for path in all_files:
+        try:
+            with open(path, encoding="utf-8", errors="ignore") as f:
+                text = f.read()
+        except OSError:
+            continue
+        for m in scan._SECRET_RE.finditer(text):
+            tokens.add(m.group(0))
+    raw, actual = run_scan(tp, "quick")
     if raw is None:
         failed = True
         return
-    # Raw secret strings planted in the fixtures, all on lines a pattern matches.
-    raw_secrets = [
-        "sk-ant-TESTFIXTURE1234567890abcdefghij",
-        "sk-ant-BUNDLEFIXTURE1234567890abcdef",
-        "AKIAIOSFODNN7FIXTURE",
-        "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef",
-        "s3cretP4ssw0rd",
-    ]
-    leaked = [s for s in raw_secrets if s in raw]
+    leaked = sorted(t for t in tokens if t in raw)
     if leaked:
         failed = True
-        print(f"  FAIL: {len(leaked)} secret(s) printed in cleartext:")
-        for s in leaked:
-            print(f"    - {s[:10]}...")
+        print(f"  FAIL: {len(leaked)} fixture secret(s) printed in cleartext:")
+        for t in leaked:
+            print(f"    - {t[:12]}...")
     elif "***" not in raw:
         failed = True
         print("  FAIL: no redaction marker in output (redaction may not have run)")
     else:
-        print(f"  PASS: {len(raw_secrets)} known secrets redacted, none in cleartext")
+        print(f"  PASS: {len(tokens)} fixture secrets, none in cleartext")
+
+
+def test_severity_synced():
+    """patterns.json must not silently downgrade a check's severity. The finding's severity
+    drives the grade, so it has to match the source-of-truth library."""
+    global failed
+    print("\n--- severity sync (patterns vs checks) ---")
+    with open(PATTERNS_JSON, encoding="utf-8") as f:
+        pats = json.load(f)["patterns"]
+    with open(os.path.join(ROOT, "scripts", "checks.data.json"), encoding="utf-8") as f:
+        checks = {c["id"]: c["severity"] for cat in json.load(f)["categories"]
+                  for c in cat["checks"]}
+    bad = [(p["id"], p.get("severity"), checks[p["id"]]) for p in pats
+           if p["id"] in checks and p.get("severity") != checks[p["id"]]]
+    if bad:
+        failed = True
+        print(f"  FAIL: {len(bad)} patterns disagree with the library on severity:")
+        for pid, ps, cs in bad:
+            print(f"    - {pid}: pattern={ps} check={cs}")
+    else:
+        print(f"  PASS: all {len(pats)} pattern severities match the library")
+
+
+def test_scrub_covers_token_formats():
+    """The global scrub regex must be a superset of every standalone token format the patterns
+    detect; otherwise a token on a line matched by a non-secret pattern prints in cleartext.
+    Samples are built by concatenation so no contiguous high-entropy token sits in this file."""
+    global failed
+    print("\n--- scrub covers detected token formats ---")
+    samples = {
+        "anthropic":    "sk-ant-" + "A" * 24,
+        "openai-proj":  "sk-proj-" + "A" * 24,
+        "aws":          "AKIA" + "ABCDEFGHIJKLMNOP",
+        "github":       "ghp_" + "A" * 32,
+        "google":       "AIza" + "A" * 35,
+        "stripe":       "sk_live_" + "A" * 24,
+        "slack":        "xoxb-1-" + "A" * 12,
+        "sendgrid":     "SG." + "a" * 22 + "." + "b" * 43,
+        "twilio":       "AC" + "0" * 32,
+        "digitalocean": "dop_v1_" + "a" * 64,
+    }
+    leaks = [name for name, tok in samples.items() if not scan._SECRET_RE.search(tok)]
+    if leaks:
+        failed = True
+        print(f"  FAIL: {len(leaks)} detected format(s) not covered by scrub: {', '.join(leaks)}")
+    else:
+        print(f"  PASS: all {len(samples)} token formats are scrubbed")
+
+
+def test_long_line_bundle():
+    """A secret past MAX_LINE_LEN in a one-line minified bundle must still be found (the build
+    sweep's whole point); the line cap windows, it doesn't truncate."""
+    global failed
+    print("\n--- long-line bundle coverage ---")
+    tp = os.path.join(FIXTURES, "true-positives")
+    raw, actual = run_scan(tp, "quick")
+    if actual is None:
+        failed = True
+        return
+    hits = [f for f in actual["findings"] if f["file"].endswith("min.bundle.js")]
+    if hits:
+        print(f"  PASS: secret past byte 5000 found ({len(hits)} finding)")
+    else:
+        failed = True
+        print("  FAIL: secret in one-line bundle past byte 5000 was missed")
 
 
 def test_version_in_sync():
@@ -274,11 +342,14 @@ if __name__ == "__main__":
 
     test_json_valid()
     test_pattern_check_alignment()
+    test_severity_synced()
     test_counts_match()
     test_version_in_sync()
     test_every_pattern_has_fixture()
     test_full_ultra_route_to_skill()
     test_secrets_redacted()
+    test_scrub_covers_token_formats()
+    test_long_line_bundle()
     test_findings_exact("quick")
     test_findings_exact("readme")
     test_false_positives("quick")
