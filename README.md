@@ -11,7 +11,7 @@ Built for the AI tooling surface the free scanners ignore (MCP servers, Claude s
 Clone into your skills directory. Pin to a release tag (recommended for a security tool, so you know exactly what's running):
 
 ```bash
-git clone --branch v0.3.0 https://github.com/kidsmeal/git-gud-security ~/.claude/skills/git-gud-security
+git clone --branch v0.4.0 https://github.com/kidsmeal/git-gud-security ~/.claude/skills/git-gud-security
 ```
 
 Or track the latest:
@@ -72,8 +72,27 @@ Flags for hooking into a workflow:
 | Flag | Effect |
 |---|---|
 | `--staged` | scan only files staged for commit (`git diff --cached`) — the pre-commit fast path |
+| `--diff <ref>` | scan only files changed against a ref (`--diff origin/main`) — fail only on what a branch/PR changed |
+| `--baseline <file>` | report/gate only on findings *new* since the snapshot in `<file>`; `--update-baseline` writes it |
 | `--fail-on critical\|high\|medium\|low` | exit nonzero if a finding at or above that severity is present, so a hook or CI step blocks |
 | `--format json\|sarif\|text` | `json` (default), `sarif` for GitHub code scanning, `text` for a terse human summary |
+| `--exclude <dir\|glob>` | skip dirs or path globs (`--exclude tests scripts/checks.data.json`) |
+
+### Adopting on an existing repo
+
+A repo with pre-existing findings shouldn't have to fix everything before CI goes green. Two ways, neither of which is an in-repo ignore file the scanner trusts (that's the one input an attacker most wants to write to):
+
+```bash
+# Snapshot today's findings, then fail only on NEW ones. The baseline is enumerated, so
+# grandfathering anything shows up as a line in its diff; suppressed findings are still shown.
+python scripts/scan.py . --mode quick --baseline .ggs-baseline.json --update-baseline
+python scripts/scan.py . --mode quick --baseline .ggs-baseline.json --fail-on high
+
+# Or scope CI to the diff: fail only on findings your branch introduced.
+python scripts/scan.py . --mode quick --diff origin/main --fail-on high
+```
+
+Suppression is never silent: a `N suppressed by baseline` line plus the suppressed findings ride along in the output, and the baseline is audited — grandfathering a critical or install-time finding prints a loud warning. The pre-install gate (`--url`) never honors a baseline.
 
 ## Pre-commit hook
 
@@ -82,7 +101,7 @@ Scan staged files on every commit and block on high+ findings. Needs the [pre-co
 ```yaml
 repos:
   - repo: https://github.com/kidsmeal/git-gud-security
-    rev: v0.3.0
+    rev: v0.4.0
     hooks:
       - id: git-gud-security        # blocks the commit on high+ findings
       # - id: git-gud-security-warn # or: print findings without blocking
@@ -106,7 +125,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: kidsmeal/git-gud-security@v0.3.0
+      - uses: kidsmeal/git-gud-security@v0.4.0
         # with:
         #   mode: quick            # or readme
         #   exclude: tests vendor  # dirs to skip

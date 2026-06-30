@@ -283,6 +283,10 @@ target repo's config precedence.
   together these back the pre-commit hook in `.pre-commit-hooks.yaml`. `--url <url|owner/repo>`
   is the pre-install gate: hardened isolated fetch + classify + scan + a go/no-go verdict
   (`--format gate`, the default for `--url`); `--keep` leaves the checkout for full/ultra reading.
+  `--diff <ref>` scopes to changed files; `--baseline <file>` (with `--update-baseline`) reports
+  only findings new since a snapshot — enumerated, audited, never honored by the `--url` gate.
+  `--exclude` takes path globs as well as dir names. GGS never reads an ignore file from inside a
+  scanned repo; scope is always operator-set (CLI) or diff-derived.
 - `scripts/patterns.json` — the machine-readable pattern library `scan.py` reads (the grep/config
   subset of `checks.md`, linked by `id`).
 - `scripts/checks.data.json` + `scripts/build_checks.py` — structured source of the check library

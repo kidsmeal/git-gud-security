@@ -4,6 +4,41 @@ All notable changes to Git Gud Security are recorded here. Versioning is
 [SemVer](https://semver.org/). Pre-1.0: behavior and check IDs may still change between
 minor versions.
 
+## [0.4.0] - 2026-06-30
+
+Adoption: drop GGS into an existing repo without drowning in pre-existing findings, and scope CI
+to what a change actually touched. No new checks; the library is unchanged at 332. The deliberate
+non-feature here is just as important — **GGS ships no in-repo ignore file.** A suppression file
+the scanner reads from inside a repo is the one input an attacker most wants to write to (a
+hostile repo would ship a `.ggsignore` that hides its own findings). Scope comes from the operator
+(CLI flags) or from what changed (diff), never from a file discovered in the target.
+
+### Added
+
+- **`--baseline FILE`.** Filter findings against an enumerated snapshot so a scan reports and
+  gates only on findings **new** since the snapshot. `--update-baseline` writes it (a deliberate
+  act; grandfathering a finding shows up as a line in the file's diff). Chosen over an open-ended
+  ignore-glob on purpose: a glob suppresses an unbounded future space including payloads not yet
+  written, while a baseline can't — a new finding isn't in the snapshot, so it still fails.
+- **Baseline integrity.** Entries are fingerprinted by `id + file + redacted evidence`,
+  line-independent so an unrelated edit doesn't silently un-suppress. Suppression is observable: a
+  `N suppressed by baseline` line plus the suppressed findings in JSON, never dropped silently. The
+  baseline is audited — grandfathering a critical or install-time finding prints a loud warning, so
+  broadening it to bury a critical trips the tool. The `--url` gate **never** honors a baseline (a
+  hostile target can't grandfather its own findings); it's rejected up front.
+- **`--diff REF`.** Scan only files changed against a ref (`--diff origin/main`), the CI adoption
+  path: fail only on what a branch/PR changed, not the whole history. Like `--staged`, it scans
+  tracked changes. Mutually exclusive with `--staged`.
+- **`--exclude` path globs.** `--exclude` now takes path globs (`scripts/checks.data.json`,
+  `**/*.min.js`), not just bare dir names — operator-supplied on the CLI, never read from inside a
+  repo. This is the self-scan corpus fix: excluding the pattern DB drops our own scan from 61
+  candidate findings to a handful (prose mentions in docs).
+
+### Tests
+
+- `--exclude` glob scoping, `--diff` scope, baseline write/load/partition, line-independent
+  fingerprint, the audit flagging a grandfathered critical, and the gate refusing `--baseline`.
+
 ## [0.3.0] - 2026-06-30
 
 The pre-install gate: vet an untrusted skill / MCP server / plugin from a URL **before** it
