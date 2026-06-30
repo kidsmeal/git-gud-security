@@ -1,6 +1,8 @@
 {
   "_comment": "Deterministic pattern library for Git Gud Security scan.py. grep/config tier only. IDs match references/checks.md. Each finding is a CANDIDATE the skill confirms at file:line before reporting. 'any' = report if any regex matches a line (case-insensitive). 'not' = suppress that line if it also matches. 'secret':true redacts the match in output. kind 'filename' flags a file's presence.",
   "secret_redaction": true,
+  "_install_time_comment": "Categories whose findings fire the moment an artifact is installed or loaded into an agent (hooks on session start, MCP tool defs that shell out, config that runs code on open, install-script remote-exec, injection in instruction files). The pre-install gate (scan.py --url) surfaces these above ordinary app-sec findings and blocks on a critical/high among them.",
+  "install_time_categories": ["claude-ext", "mcp", "ai-config-trust", "supply-chain"],
   "patterns": [
     {
       "id": "hardcoded-api-key-literal",

@@ -80,6 +80,13 @@ def load_patterns():
     return compiled, data.get("secret_redaction", True)
 
 
+def install_time_categories():
+    """Categories whose findings fire at install/load time — the pre-install gate surfaces
+    these first and blocks on a critical/high among them. Data-driven from patterns.json."""
+    with open(os.path.join(HERE, "patterns.json"), encoding="utf-8") as f:
+        return set(json.load(f).get("install_time_categories", []))
+
+
 def ext_of(path):
     return os.path.splitext(path)[1].lower()
 
@@ -528,6 +535,82 @@ def to_text(out):
     return "\n".join(lines) + "\n"
 
 
+def gate_verdict(findings):
+    """Three-level pre-install verdict, keyed on install-time risk.
+
+    DO NOT INSTALL — a critical/high finding that fires at install/load time.
+    REVIEW FIRST   — real findings, but none that fire on load (their leaked key, not an
+                     attack on you the moment you install).
+    LOOKS CLEAN    — nothing within this mode's reach.
+    """
+    install_time = [f for f in findings if f.get("install_time")]
+    blocking = [f for f in install_time if f["severity"] in ("critical", "high")]
+    if blocking:
+        return "DO NOT INSTALL"
+    if findings:
+        return "REVIEW FIRST"
+    return "LOOKS CLEAN"
+
+
+def to_gate(out):
+    """Pre-install gate report: a go/no-go verdict, install-time risks first, then the rest.
+
+    The user asked a yes/no question ("safe to install?"), so lead with the answer. Findings
+    are still candidates — the verdict names what the deterministic tier found; the skill's
+    full/ultra tiers confirm reachability before a human trusts it.
+    """
+    findings = out["findings"]
+    c = out["counts"]
+    g = out.get("gate", {})
+    verdict = gate_verdict(findings)
+    name = (g.get("url") or out.get("repo", "")).rstrip("/").split("/")[-1] or "target"
+    sha = (g.get("sha") or "")[:12]
+    head = f"Git Gud Security — install gate · {name}"
+    if sha:
+        head += f" @ {sha}"
+    install_time = [f for f in findings if f.get("install_time")]
+    other = [f for f in findings if not f.get("install_time")]
+    it_counts = {s: sum(1 for f in install_time if f["severity"] == s)
+                 for s in ("critical", "high", "medium", "low")}
+
+    lines = [head, "",
+             f"  Verdict: {verdict:<16} install-time: {it_counts['critical']} critical · "
+             f"{it_counts['high']} high   ·   all: {c['critical']} critical · {c['high']} high · "
+             f"{c['medium']} medium · {c['low']} low"]
+    if g.get("artifact"):
+        lines.append(f"  Artifact: {g['artifact']}"
+                     + (f"  ({', '.join(g['signals'])})" if g.get("signals") else ""))
+    lines.append("")
+
+    def block(title, items):
+        if not items:
+            return
+        lines.append(title)
+        for i, f in enumerate(items, 1):
+            loc = f"{f['file']}:{f['line']}" if f.get("line") else f["file"]
+            lines.append(f" {i:>2}. {f['severity'].upper():<8} {f['id']:<44} {loc}")
+            if f.get("fix"):
+                lines.append(f"     fix: {f['fix']}")
+        lines.append("")
+
+    if not findings:
+        lines.append("  no install-time risks or other findings in this mode.")
+        lines.append("")
+    else:
+        block("INSTALL-TIME RISKS  (fire the moment you load this)", install_time)
+        block("OTHER FINDINGS  (real, but not triggered on install)", other)
+
+    checked = "install hooks, MCP/tool defs, config-on-open, install scripts, instruction-file " \
+              "injection, secrets"
+    lines.append(f"what this gate checked: {checked}.")
+    lines.append("did NOT run the target's code — static read only.  "
+                 + (f"{sha} " if sha else "")
+                 + (f"on {g['ref']}." if g.get("ref") else "at HEAD."))
+    lines.append("candidate findings — confirm each at file:line. run full/ultra (the skill) to "
+                 "trace reachability before trusting a LOOKS CLEAN.")
+    return "\n".join(lines) + "\n"
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="Git Gud Security deterministic sweep. Output is CANDIDATE findings "
@@ -543,9 +626,10 @@ def main():
     ap.add_argument("--version", action="version", version=f"git-gud-security {__version__}")
     ap.add_argument("--mode", default="quick", choices=["readme", "quick", "full", "ultra"])
     ap.add_argument("--json", action="store_true", help="(deprecated alias for --format json)")
-    ap.add_argument("--format", default="json", choices=["json", "sarif", "text"],
+    ap.add_argument("--format", default=None, choices=["json", "sarif", "text", "gate"],
                     help="json (default, for the skill), sarif (GitHub code scanning), "
-                         "text (terse summary, for a pre-commit hook)")
+                         "text (terse summary, for a pre-commit hook), gate (pre-install "
+                         "verdict; the default when --url is used)")
     ap.add_argument("--staged", action="store_true",
                     help="scan only files staged for commit (git diff --cached) — pre-commit fast path")
     ap.add_argument("--fail-on", default=None, choices=["critical", "high", "medium", "low"],
@@ -555,8 +639,12 @@ def main():
     ap.add_argument("--exclude", nargs="*", default=[], metavar="DIR",
                     help="additional directories to skip (e.g. --exclude references tests)")
     args = ap.parse_args()
+    # --json is the legacy alias and wins if set. Otherwise: a gate (--url) run defaults to the
+    # gate verdict; a plain scan defaults to json. An explicit --format always overrides.
     if args.json:
         args.format = "json"
+    elif args.format is None:
+        args.format = "gate" if args.url else "json"
 
     # full/ultra do dataflow tracing and adversarial verification — that needs an LLM, so
     # they live in the Claude Code skill, not this script. Don't fake them by aliasing quick.
@@ -653,8 +741,12 @@ def main():
     # (the skill stamps its trace/adversarial findings `llm`). Exposed in JSON and split into
     # per-engine runs in SARIF. Note: a finding can be deterministic-engine yet carry a
     # `trace` detectability — the tier describes the check, the engine describes who fired it.
+    it_cats = install_time_categories()
     for f in findings:
         f["engine"] = "deterministic"
+        # Does this finding fire when the artifact is installed/loaded into an agent? The gate
+        # surfaces these first and the verdict blocks on a critical/high among them.
+        f["install_time"] = f.get("category") in it_cats
 
     out = {
         "tool": "git-gud-security",
@@ -681,6 +773,8 @@ def main():
         payload = json.dumps(to_sarif(out), indent=2)
     elif args.format == "text":
         payload = to_text(out)
+    elif args.format == "gate":
+        payload = to_gate(out)
     else:
         payload = json.dumps(out, indent=2)
     if args.out:
