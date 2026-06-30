@@ -3,16 +3,64 @@
   "mode": "readme",
   "repo": "C:/Users/atk67/Documents/git-gud-security/tests/fixtures/true-positives",
   "scanned": {
-    "files": 15,
+    "files": 16,
     "pattern_count": 80
   },
   "counts": {
-    "critical": 8,
+    "critical": 12,
     "high": 25,
     "medium": 3,
     "low": 2
   },
   "findings": [
+    {
+      "id": "service-role-key-in-client",
+      "category": "secrets-and-credentials",
+      "severity": "critical",
+      "title": "Service/admin key shipped to the client (RLS bypass)",
+      "file": "README.md",
+      "line": 3,
+      "snippet": "README claim matches red flag: A fun little project. Fully serverless, no backend needed \u2014 it talks to Supabase",
+      "fix": "",
+      "detectability": "readme",
+      "inferred": true
+    },
+    {
+      "id": "service-role-key-in-client",
+      "category": "secrets-and-credentials",
+      "severity": "critical",
+      "title": "Service/admin key shipped to the client (RLS bypass)",
+      "file": "README.md",
+      "line": 8,
+      "snippet": "README claim matches red flag: Just add your service role key to .env and you're done. No login required, the API",
+      "fix": "",
+      "detectability": "readme",
+      "inferred": true
+    },
+    {
+      "id": "no-authz-on-endpoint",
+      "category": "authn-authz-access-control",
+      "severity": "critical",
+      "title": "API endpoint / route handler with no authentication check",
+      "file": "README.md",
+      "line": 8,
+      "snippet": "README claim matches red flag: Just add your service role key to .env and you're done. No login required, the API",
+      "fix": "",
+      "detectability": "readme",
+      "inferred": true
+    },
+    {
+      "id": "secret-in-client-bundle-or-sourcemaps",
+      "category": "secrets-and-credentials",
+      "severity": "critical",
+      "title": "Secret inlined into the built JS bundle or leaked via source maps",
+      "file": "README.md",
+      "line": 11,
+      "snippet": "README claim matches red flag: Deploy anywhere: 100% client-side, host on any static CDN.",
+      "fix": "",
+      "detectability": "readme",
+      "inferred": true
+    },
     {
       "id": "supabase-rls-disabled-public-table",
       "category": "baas",

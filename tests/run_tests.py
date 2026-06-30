@@ -18,6 +18,9 @@ FIXTURES = os.path.join(ROOT, "tests", "fixtures")
 EXPECTED = os.path.join(ROOT, "tests", "expected")
 PATTERNS_JSON = os.path.join(ROOT, "scripts", "patterns.json")
 
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import scan  # noqa: E402  (reuse the real scanner for per-pattern coverage)
+
 failed = False
 
 
@@ -74,6 +77,49 @@ def test_true_positives(mode):
         print(f"  PASS: {len(actual_ids)} / {len(expected_ids)} patterns fired")
     elif not missing:
         print(f"  PASS: all {len(expected_ids)} expected patterns fired ({len(unexpected)} extra)")
+
+
+def test_every_pattern_has_fixture():
+    """Rigorous coverage: every individual pattern ENTRY must fire on a fixture, not just
+    every unique id. Six ids map to two patterns each, so an id-only check could let a
+    broken duplicate hide behind its sibling. This runs each pattern object on its own."""
+    global failed
+    print("\n--- per-pattern fixture coverage ---")
+    patterns, do_redact = scan.load_patterns()
+    tp = os.path.join(FIXTURES, "true-positives")
+    # Include build-output dirs so build-only fixtures (inlined dist secret) count.
+    all_files = list(scan.iter_files(tp)) + list(scan.iter_build_files(tp, scan.BUILD_OUTPUT))
+    missing = []
+    for pat in patterns:
+        if pat.get("kind") == "filename":
+            f = scan.scan_filenames(tp, [pat], files=all_files)
+        else:
+            f, _ = scan.scan_content(tp, [pat], do_redact, files=all_files)
+        if not f:
+            missing.append((pat["id"], pat.get("title", "")))
+    if missing:
+        print(f"  FAIL: {len(missing)} pattern entries have no fixture:")
+        for pid, title in missing:
+            print(f"    - {pid}: {title}")
+        failed = True
+    else:
+        print(f"  PASS: all {len(patterns)} pattern entries fire on a fixture")
+
+
+def test_full_ultra_route_to_skill():
+    """full/ultra can't run standalone (need an LLM); they must exit with a pointer, not
+    silently alias quick."""
+    global failed
+    print("\n--- full/ultra route to skill ---")
+    tp = os.path.join(FIXTURES, "true-positives")
+    for mode in ("full", "ultra"):
+        r = subprocess.run([sys.executable, SCAN_PY, tp, "--mode", mode],
+                           capture_output=True, text=True)
+        if r.returncode == 2 and "needs the Claude Code skill" in r.stderr:
+            print(f"  PASS: --mode {mode} exits 2 with skill pointer")
+        else:
+            print(f"  FAIL: --mode {mode} rc={r.returncode}, stderr={r.stderr.strip()[:80]}")
+            failed = True
 
 
 def test_false_positives(mode):
@@ -157,6 +203,8 @@ if __name__ == "__main__":
     test_json_valid()
     test_pattern_check_alignment()
     test_counts_match()
+    test_every_pattern_has_fixture()
+    test_full_ultra_route_to_skill()
     test_true_positives("quick")
     test_true_positives("readme")
     test_false_positives("quick")

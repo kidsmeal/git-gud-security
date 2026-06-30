@@ -8,7 +8,11 @@ score, and grade. This is the cheap grep/config tier; dataflow (trace tier) is t
 job in full/ultra mode.
 
 Usage:
-    python scan.py <repo-path> [--mode quick|full|readme] [--json] [--out FILE]
+    python scan.py <repo-path> [--mode readme|quick] [--json] [--out FILE]
+
+readme = prose red-flag scan + config/filename checks. quick = readme + full pattern sweep
++ a secret/sourcemap sweep of build output. full/ultra need the skill (they require an LLM
+for dataflow tracing and adversarial verification) and exit with a pointer if invoked here.
 
 Output: JSON {findings: [...], scanned: {...}} to stdout (and --out if given).
 Each finding: id, category, severity, title, file, line, snippet (secrets redacted),
@@ -25,14 +29,17 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Directories never worth scanning. .env detection still works because we list the tree
-# separately; these are just skipped for content scanning.
-SKIP_DIRS = {
-    "node_modules", ".git", "dist", "build", ".next", "out", ".nuxt", ".svelte-kit",
-    "vendor", "target", ".venv", "venv", "__pycache__", ".mypy_cache", ".pytest_cache",
-    "coverage", ".turbo", ".cache", "bower_components", ".gradle", ".idea",
-    "Pods", "DerivedData", ".terraform",
+# Dependency / cache / IDE dirs: never scanned at all.
+ALWAYS_SKIP = {
+    "node_modules", ".git", "vendor", "target", ".venv", "venv", "__pycache__",
+    ".mypy_cache", ".pytest_cache", "coverage", ".turbo", ".cache", "bower_components",
+    ".gradle", ".idea", "Pods", "DerivedData", ".terraform",
 }
+# Build output: skipped for the general pattern sweep, but still swept for inlined secrets
+# and sourcemaps — that is exactly where a leaked key or a .map file ends up, and the
+# secret-in-bundle / sourcemap checks would otherwise be dead code.
+BUILD_OUTPUT = {"dist", "build", ".next", "out", ".nuxt", ".svelte-kit"}
+SKIP_DIRS = ALWAYS_SKIP | BUILD_OUTPUT
 
 # Binary / generated extensions to skip for content scanning.
 SKIP_EXTS = {
@@ -128,6 +135,18 @@ def iter_files(root):
             yield os.path.join(dirpath, fn)
 
 
+def iter_build_files(root, build_dirs, skip=ALWAYS_SKIP):
+    """Yield files living under a build-output dir (incl. nested, e.g. packages/*/dist).
+    Prunes `skip` (always-skip + any user --exclude dirs) so excluded parents like tests/
+    are not entered. Used for the secret/sourcemap sweep of build output."""
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in skip]
+        segments = set(rel(root, dirpath).split("/"))
+        if segments & build_dirs:
+            for fn in filenames:
+                yield os.path.join(dirpath, fn)
+
+
 def rel(root, path):
     try:
         return os.path.relpath(path, root).replace("\\", "/")
@@ -135,10 +154,10 @@ def rel(root, path):
         return path.replace("\\", "/")
 
 
-def scan_content(root, patterns, do_redact):
+def scan_content(root, patterns, do_redact, files=None):
     findings = []
     files_scanned = 0
-    for path in iter_files(root):
+    for path in (iter_files(root) if files is None else files):
         if ext_of(path) in SKIP_EXTS:
             continue
         try:
@@ -189,11 +208,11 @@ def scan_content(root, patterns, do_redact):
     return findings, files_scanned
 
 
-def scan_filenames(root, patterns):
+def scan_filenames(root, patterns, files=None):
     """File-presence checks: flag if a file matching a name/glob exists in the tree."""
     findings = []
     present = []
-    for path in iter_files(root):
+    for path in (iter_files(root) if files is None else files):
         present.append((os.path.basename(path).lower(), rel(root, path)))
     for pat in patterns:
         if pat.get("kind") != "filename":
@@ -251,17 +270,102 @@ def check_env_hygiene(root):
     return findings
 
 
+def scan_build_output(root, patterns, do_redact, build_dirs, skip=ALWAYS_SKIP):
+    """Sweep build-output dirs for inlined secrets and committed sourcemaps only. These
+    dirs are skipped by the general walk, but a key compiled into a bundle or a leaked
+    .map lives here and nowhere else."""
+    build_files = list(iter_build_files(root, build_dirs, skip))
+    if not build_files:
+        return []
+    secret_content = [p for p in patterns
+                      if p.get("kind", "content") == "content" and p.get("secret")]
+    filename_pats = [p for p in patterns if p.get("kind") == "filename"]
+    content_findings, _ = scan_content(root, secret_content, do_redact, files=build_files)
+    name_findings = scan_filenames(root, filename_pats, files=build_files)
+    return content_findings + name_findings
+
+
+PROSE_EXTS = {".md", ".mdx", ".markdown", ".txt", ".rst"}
+
+
+def load_readme_phrases():
+    """Pull the README red-flag phrases out of checks.data.json (the structured source the
+    readme-redflags.md doc is generated from). Returns (normalized_phrase, id, title,
+    severity, category) tuples."""
+    path = os.path.join(HERE, "checks.data.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return []
+    out = []
+    for cat in data.get("categories", []):
+        cat_id = cat.get("key") or cat.get("title", "")
+        for c in cat.get("checks", []):
+            for phrase in (c.get("readmeRedFlags") or []):
+                norm = " ".join(str(phrase).lower().split())
+                if len(norm) >= 12:  # skip short generic phrases that would over-match
+                    out.append((norm, c["id"], c.get("title", ""),
+                                c.get("severity", "medium"), cat_id))
+    return out
+
+
+def scan_prose_redflags(root, phrases, files=None):
+    """readme-tier: match doc/landing prose against the red-flag phrase list. These are
+    low-confidence INFERRED leads (marked inferred=true), not confirmed holes — a literal
+    case-insensitive phrase pass. The skill/LLM does the semantic version."""
+    findings = []
+    for path in (iter_files(root) if files is None else files):
+        if ext_of(path) not in PROSE_EXTS:
+            continue
+        try:
+            if os.path.getsize(path) > MAX_FILE_BYTES:
+                continue
+            with open(path, encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+        except (OSError, UnicodeError):
+            continue
+        norm_lines = [(" ".join(l.lower().split()), idx) for idx, l in enumerate(lines, 1)]
+        for norm, cid, title, sev, cat in phrases:
+            for nl, idx in norm_lines:
+                if norm and norm in nl:
+                    findings.append({
+                        "id": cid,
+                        "category": cat,
+                        "severity": sev,
+                        "title": title,
+                        "file": rel(root, path),
+                        "line": idx,
+                        "snippet": "README claim matches red flag: " + lines[idx - 1].rstrip()[:160],
+                        "fix": "",
+                        "detectability": "readme",
+                        "inferred": True,
+                    })
+                    break  # one hit per phrase per file
+    return findings
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="Git Gud Security deterministic sweep. Output is CANDIDATE findings "
                     "that need confirmation at file:line before reporting.")
     ap.add_argument("repo")
-    ap.add_argument("--mode", default="quick", choices=["readme", "quick", "full"])
+    ap.add_argument("--mode", default="quick", choices=["readme", "quick", "full", "ultra"])
     ap.add_argument("--json", action="store_true", help="(default) emit JSON")
     ap.add_argument("--out", default=None)
     ap.add_argument("--exclude", nargs="*", default=[], metavar="DIR",
                     help="additional directories to skip (e.g. --exclude references tests)")
     args = ap.parse_args()
+
+    # full/ultra do dataflow tracing and adversarial verification — that needs an LLM, so
+    # they live in the Claude Code skill, not this script. Don't fake them by aliasing quick.
+    if args.mode in ("full", "ultra"):
+        needs = "dataflow tracing" if args.mode == "full" else \
+                "dataflow tracing and adversarial multi-agent verification"
+        print(f"git-gud-security: '{args.mode}' mode needs the Claude Code skill. It requires "
+              f"an LLM for {needs}. The standalone script runs the deterministic tiers only: "
+              f"--mode readme or --mode quick.", file=sys.stderr)
+        sys.exit(2)
 
     root = os.path.abspath(args.repo)
     if not os.path.isdir(root):
@@ -277,18 +381,25 @@ def main():
           f"Output is candidate findings, not confirmed vulnerabilities.",
           file=sys.stderr)
 
+    # Shared across modes (quick is a strict superset of readme): prose red-flag scan,
+    # filename checks, .env hygiene.
+    prose_findings = scan_prose_redflags(root, load_readme_phrases())
+    name_findings = scan_filenames(root, patterns)
+    env_findings = check_env_hygiene(root)
+
     if args.mode == "readme":
-        # readme mode: config/filename checks only, no grep patterns
+        # readme: config-tier content only, no grep tier.
         content_pats = [p for p in patterns if p.get("detectability") == "config"
                         and p.get("kind", "content") == "content"]
         content_findings, files_scanned = scan_content(root, content_pats, do_redact)
-        name_findings = scan_filenames(root, patterns)
-        env_findings = check_env_hygiene(root)
     else:
-        # quick/full: all grep + config patterns (trace tier is the LLM's job)
+        # quick: every grep + config pattern, plus a secret/sourcemap sweep of build output.
         content_findings, files_scanned = scan_content(root, patterns, do_redact)
-        name_findings = scan_filenames(root, patterns)
-        env_findings = check_env_hygiene(root)
+        build_dirs = BUILD_OUTPUT - set(args.exclude)
+        build_skip = ALWAYS_SKIP | set(args.exclude)
+        content_findings += scan_build_output(root, patterns, do_redact, build_dirs, build_skip)
+
+    content_findings += prose_findings
 
     findings = content_findings + name_findings + env_findings
     sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}

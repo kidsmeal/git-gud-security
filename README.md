@@ -45,14 +45,17 @@ Default is `quick`. Each mode is a strict superset of the one below it.
 
 ## Standalone scanner
 
-The deterministic sweep runs without Claude Code (Python 3.8+, no deps):
+The deterministic tiers run without Claude Code (Python 3.8+, no deps):
 
 ```bash
 python scripts/scan.py /path/to/repo --mode quick
+python scripts/scan.py /path/to/repo --mode readme
 python scripts/scan.py /path/to/repo --mode quick --exclude references tests fixtures
 ```
 
-Outputs JSON. Secrets are redacted. This is the grep/config tier only. Output is **candidate findings**, not confirmed vulnerabilities. Each hit needs human or LLM review at the cited `file:line` to confirm it's real (not a comment, test fixture, example, or safe public key). When run as a Claude Code skill, that confirmation step happens automatically. When run standalone, you're looking at raw candidates.
+The script does the two deterministic modes: `readme` (prose red-flag phrase scan + config/filename checks) and `quick` (that plus the full pattern sweep and a secret/sourcemap sweep of build output). `full` and `ultra` need an LLM for dataflow tracing and adversarial verification, so they only run through the skill; the script exits with a pointer if you ask for them.
+
+Outputs JSON. Secrets are redacted. Output is **candidate findings**, not confirmed vulnerabilities. Each hit needs human or LLM review at the cited `file:line` to confirm it's real (not a comment, test fixture, example, or safe public key); readme-tier matches are inferred from prose and marked `inferred`. When run as a Claude Code skill, that confirmation step happens automatically. When run standalone, you're looking at raw candidates.
 
 ## Check library
 
