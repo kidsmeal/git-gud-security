@@ -8,11 +8,17 @@ score, and grade. This is the cheap grep/config tier; dataflow (trace tier) is t
 job in full/ultra mode.
 
 Usage:
-    python scan.py <repo-path> [--mode readme|quick] [--json] [--out FILE]
+    python scan.py <repo-path> [--mode readme|quick] [--staged] [--format json|sarif|text]
+                   [--fail-on critical|high|medium|low] [--out FILE]
 
 readme = prose red-flag scan + config/filename checks. quick = readme + full pattern sweep
 + a secret/sourcemap sweep of build output. full/ultra need the skill (they require an LLM
 for dataflow tracing and adversarial verification) and exit with a pointer if invoked here.
+
+--staged scans only files staged for commit (git diff --cached) — the fast path for a
+pre-commit hook. --fail-on exits nonzero when a finding at or above that severity is present,
+so the hook can block the commit. --format sarif emits SARIF 2.1.0 for GitHub code scanning;
+--format text emits a terse human summary.
 
 Output: JSON {findings: [...], scanned: {...}} to stdout (and --out if given).
 Each finding: id, category, severity, title, file, line, snippet (secrets redacted),
@@ -25,9 +31,10 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -142,6 +149,32 @@ def iter_files(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
         for fn in filenames:
             yield os.path.join(dirpath, fn)
+
+
+def staged_files(root):
+    """Absolute paths of files staged for commit (added/copied/modified), via git. This is
+    the pre-commit fast path: scan what's about to land, not the whole tree. Returns None if
+    git isn't available or `root` isn't a work tree (caller falls back to a full-tree scan);
+    an empty list means a clean stage. Dependency/cache dirs are pruned the same as a walk."""
+    try:
+        r = subprocess.run(
+            ["git", "-C", root, "diff", "--cached", "--name-only", "--diff-filter=ACM", "-z"],
+            capture_output=True, text=True)
+    except (OSError, ValueError):
+        return None
+    if r.returncode != 0:
+        return None
+    out = []
+    for name in r.stdout.split("\0"):
+        name = name.strip()
+        if not name:
+            continue
+        if set(name.replace("\\", "/").split("/")) & ALWAYS_SKIP:
+            continue
+        p = os.path.join(root, name)
+        if os.path.isfile(p):
+            out.append(p)
+    return out
 
 
 def iter_build_files(root, build_dirs, skip=ALWAYS_SKIP):
@@ -262,10 +295,10 @@ def scan_filenames(root, patterns, files=None):
     return findings
 
 
-def check_env_hygiene(root):
+def check_env_hygiene(root, files=None):
     """Light .env-tracking check independent of patterns.json. A real .env (not an
     example) present in the tree is reported; the skill confirms it's git-tracked and
-    holds real values."""
+    holds real values. With `files`, only those paths are considered (staged-mode)."""
     findings = []
     example_markers = ("example", "sample", "template", "dist")
     gitignore = os.path.join(root, ".gitignore")
@@ -276,7 +309,7 @@ def check_env_hygiene(root):
             ignored_env = bool(re.search(r"^\s*\.env", txt, re.MULTILINE))
         except OSError:
             pass
-    for path in iter_files(root):
+    for path in (iter_files(root) if files is None else files):
         base = os.path.basename(path).lower()
         if base.startswith(".env") and not any(m in base for m in example_markers):
             findings.append({
@@ -368,6 +401,91 @@ def scan_prose_redflags(root, phrases, files=None):
     return findings
 
 
+SEV_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+
+# GitHub code scanning reads SARIF `level` for pass/fail and the `security-severity` property
+# (a 0-10 string) to bucket findings into its own critical/high/medium/low in the UI.
+_SARIF_LEVEL = {"critical": "error", "high": "error", "medium": "warning", "low": "note"}
+_SECURITY_SEVERITY = {"critical": "9.5", "high": "8.0", "medium": "5.0", "low": "2.0"}
+
+
+def to_sarif(out):
+    """Render the result as SARIF 2.1.0 so it drops into GitHub code scanning (the Security
+    tab and inline PR annotations) with no glue. One rule per distinct finding id."""
+    findings = out["findings"]
+    rules = {}
+    for f in findings:
+        rid = f["id"]
+        if rid not in rules:
+            rules[rid] = {
+                "id": rid,
+                "name": rid,
+                "shortDescription": {"text": f.get("title") or rid},
+                "defaultConfiguration": {"level": _SARIF_LEVEL.get(f["severity"], "warning")},
+                "properties": {
+                    "category": f.get("category", ""),
+                    "detectability": f.get("detectability", ""),
+                    "security-severity": _SECURITY_SEVERITY.get(f["severity"], "5.0"),
+                },
+            }
+    results = []
+    for f in findings:
+        msg = f.get("title") or f["id"]
+        if f.get("fix"):
+            msg = f"{msg}. Fix: {f['fix']}"
+        line = f.get("line") or 0
+        results.append({
+            "ruleId": f["id"],
+            "level": _SARIF_LEVEL.get(f["severity"], "warning"),
+            "message": {"text": msg},
+            "locations": [{
+                "physicalLocation": {
+                    "artifactLocation": {"uri": f["file"]},
+                    # SARIF regions are 1-based; config/filename findings (line 0) anchor to 1.
+                    "region": {"startLine": line if line and line > 0 else 1},
+                }
+            }],
+            "properties": {
+                "severity": f["severity"],
+                "detectability": f.get("detectability", ""),
+                "inferred": bool(f.get("inferred")),
+            },
+        })
+    return {
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [{
+            "tool": {"driver": {
+                "name": "git-gud-security",
+                "informationUri": "https://github.com/kidsmeal/git-gud-security",
+                "version": out.get("version", ""),
+                "rules": list(rules.values()),
+            }},
+            "results": results,
+        }],
+    }
+
+
+def to_text(out):
+    """Terse human summary — the format a pre-commit hook prints. One line per finding,
+    severity-sorted (the dict is already sorted by main)."""
+    findings = out["findings"]
+    c = out["counts"]
+    lines = [f"git-gud-security — {out['mode']} scan · {out['scanned']['files']} files scanned",
+             f"  {c['critical']} critical · {c['high']} high · {c['medium']} medium · {c['low']} low"]
+    if not findings:
+        lines.append("  clean (no candidate findings in this mode)")
+        return "\n".join(lines) + "\n"
+    lines.append("")
+    for f in findings:
+        loc = f"{f['file']}:{f['line']}" if f.get("line") else f["file"]
+        inferred = "  (inferred)" if f.get("inferred") else ""
+        lines.append(f"  {f['severity'].upper():<8} {f['id']:<44} {loc}{inferred}")
+    lines.append("")
+    lines.append("candidate findings — confirm each at file:line before trusting.")
+    return "\n".join(lines) + "\n"
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="Git Gud Security deterministic sweep. Output is CANDIDATE findings "
@@ -375,11 +493,21 @@ def main():
     ap.add_argument("repo")
     ap.add_argument("--version", action="version", version=f"git-gud-security {__version__}")
     ap.add_argument("--mode", default="quick", choices=["readme", "quick", "full", "ultra"])
-    ap.add_argument("--json", action="store_true", help="(default) emit JSON")
+    ap.add_argument("--json", action="store_true", help="(deprecated alias for --format json)")
+    ap.add_argument("--format", default="json", choices=["json", "sarif", "text"],
+                    help="json (default, for the skill), sarif (GitHub code scanning), "
+                         "text (terse summary, for a pre-commit hook)")
+    ap.add_argument("--staged", action="store_true",
+                    help="scan only files staged for commit (git diff --cached) — pre-commit fast path")
+    ap.add_argument("--fail-on", default=None, choices=["critical", "high", "medium", "low"],
+                    help="exit nonzero if a finding at or above this severity is present "
+                         "(use in a pre-commit hook / CI to block on findings)")
     ap.add_argument("--out", default=None)
     ap.add_argument("--exclude", nargs="*", default=[], metavar="DIR",
                     help="additional directories to skip (e.g. --exclude references tests)")
     args = ap.parse_args()
+    if args.json:
+        args.format = "json"
 
     # full/ultra do dataflow tracing and adversarial verification — that needs an LLM, so
     # they live in the Claude Code skill, not this script. Don't fake them by aliasing quick.
@@ -401,27 +529,40 @@ def main():
 
     patterns, do_redact = load_patterns()
 
-    print(f"git-gud-security: {len(patterns)} patterns, mode={args.mode}. "
+    # --staged: restrict every tier to the files staged for commit. None means whole-tree
+    # (no --staged, or git unavailable); [] means a clean stage (nothing to scan).
+    scan_files = None
+    if args.staged:
+        scan_files = staged_files(root)
+        if scan_files is None:
+            print("git-gud-security: --staged needs a git work tree; scanning the whole repo "
+                  "instead.", file=sys.stderr)
+
+    print(f"git-gud-security: {len(patterns)} patterns, mode={args.mode}"
+          f"{', staged only' if scan_files is not None else ''}. "
           f"Output is candidate findings, not confirmed vulnerabilities.",
           file=sys.stderr)
 
     # Shared across modes (quick is a strict superset of readme): prose red-flag scan,
     # filename checks, .env hygiene.
-    prose_findings = scan_prose_redflags(root, load_readme_phrases())
-    name_findings = scan_filenames(root, patterns)
-    env_findings = check_env_hygiene(root)
+    prose_findings = scan_prose_redflags(root, load_readme_phrases(), files=scan_files)
+    name_findings = scan_filenames(root, patterns, files=scan_files)
+    env_findings = check_env_hygiene(root, files=scan_files)
 
     if args.mode == "readme":
         # readme: config-tier content only, no grep tier.
         content_pats = [p for p in patterns if p.get("detectability") == "config"
                         and p.get("kind", "content") == "content"]
-        content_findings, files_scanned = scan_content(root, content_pats, do_redact)
+        content_findings, files_scanned = scan_content(root, content_pats, do_redact, files=scan_files)
     else:
         # quick: every grep + config pattern, plus a secret/sourcemap sweep of build output.
-        content_findings, files_scanned = scan_content(root, patterns, do_redact)
-        build_dirs = BUILD_OUTPUT - set(args.exclude)
-        build_skip = ALWAYS_SKIP | set(args.exclude)
-        content_findings += scan_build_output(root, patterns, do_redact, build_dirs, build_skip)
+        content_findings, files_scanned = scan_content(root, patterns, do_redact, files=scan_files)
+        # Build-output sweep walks dirs the normal pass skips; in staged mode the staged file
+        # list already includes any staged bundle, so only run it on a whole-tree scan.
+        if scan_files is None:
+            build_dirs = BUILD_OUTPUT - set(args.exclude)
+            build_skip = ALWAYS_SKIP | set(args.exclude)
+            content_findings += scan_build_output(root, patterns, do_redact, build_dirs, build_skip)
 
     content_findings += prose_findings
 
@@ -443,11 +584,23 @@ def main():
         "note": "Scanner output is candidate findings. Confirm each at file:line before "
                 "reporting; drop false positives (comments, tests, docs, safe public keys).",
     }
-    payload = json.dumps(out, indent=2)
+    if args.format == "sarif":
+        payload = json.dumps(to_sarif(out), indent=2)
+    elif args.format == "text":
+        payload = to_text(out)
+    else:
+        payload = json.dumps(out, indent=2)
     if args.out:
         with open(args.out, "w", encoding="utf-8") as f:
             f.write(payload)
     print(payload)
+
+    # --fail-on: exit nonzero when a finding meets the threshold, so a pre-commit hook or CI
+    # step blocks. Candidate findings are unconfirmed, so this is opt-in, not the default.
+    if args.fail_on:
+        threshold = SEV_RANK[args.fail_on]
+        if any(SEV_RANK.get(f["severity"], 0) >= threshold for f in findings):
+            sys.exit(1)
 
 
 if __name__ == "__main__":

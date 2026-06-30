@@ -250,6 +250,110 @@ def test_full_ultra_route_to_skill():
             failed = True
 
 
+def test_sarif_output():
+    """--format sarif must emit valid SARIF 2.1.0: one result per finding, every result
+    carrying a ruleId and a 1-based location. This is the GitHub code-scanning contract."""
+    global failed
+    print("\n--- SARIF output ---")
+    tp = os.path.join(FIXTURES, "true-positives")
+    r = subprocess.run([sys.executable, SCAN_PY, tp, "--mode", "quick", "--format", "sarif"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        failed = True
+        print(f"  FAIL: exited {r.returncode}: {r.stderr.strip()[:120]}")
+        return
+    try:
+        doc = json.loads(r.stdout)
+    except json.JSONDecodeError as e:
+        failed = True
+        print(f"  FAIL: not valid JSON: {e}")
+        return
+    # cross-check finding count against the json format on the same fixtures
+    _, jdoc = run_scan(tp, "quick")
+    n_findings = len(jdoc["findings"])
+    run = doc.get("runs", [{}])[0]
+    results = run.get("results", [])
+    problems = []
+    if doc.get("version") != "2.1.0":
+        problems.append(f"version={doc.get('version')} (want 2.1.0)")
+    if len(results) != n_findings:
+        problems.append(f"{len(results)} results vs {n_findings} findings")
+    for res in results:
+        if not res.get("ruleId"):
+            problems.append("a result has no ruleId"); break
+        line = res["locations"][0]["physicalLocation"]["region"]["startLine"]
+        if line < 1:
+            problems.append(f"startLine {line} < 1 (invalid SARIF region)"); break
+    if not run.get("tool", {}).get("driver", {}).get("rules"):
+        problems.append("no rules in tool.driver")
+    if problems:
+        failed = True
+        print(f"  FAIL: {'; '.join(problems)}")
+    else:
+        print(f"  PASS: valid SARIF, {len(results)} results, "
+              f"{len(run['tool']['driver']['rules'])} rules")
+
+
+def test_fail_on_exit_code():
+    """--fail-on must exit nonzero when a finding meets the threshold and zero otherwise —
+    this is what lets a pre-commit hook block a commit. Default (no --fail-on) stays 0."""
+    global failed
+    print("\n--- --fail-on exit code ---")
+    tp = os.path.join(FIXTURES, "true-positives")
+    fp = os.path.join(FIXTURES, "false-positives")
+    cases = [
+        (tp, ["--fail-on", "critical"], "ne0", "dirty repo, fail-on critical"),
+        (fp, ["--fail-on", "low"], "eq0", "clean repo, fail-on low"),
+        (tp, [], "eq0", "dirty repo, no --fail-on (must not block)"),
+    ]
+    for target, extra, want, label in cases:
+        r = subprocess.run([sys.executable, SCAN_PY, target, "--mode", "quick",
+                            "--format", "text"] + extra, capture_output=True, text=True)
+        ok = (r.returncode != 0) if want == "ne0" else (r.returncode == 0)
+        if ok:
+            print(f"  PASS: {label} -> rc={r.returncode}")
+        else:
+            failed = True
+            print(f"  FAIL: {label} -> rc={r.returncode} (wanted {want})")
+
+
+def test_staged_scope():
+    """--staged must scan only files staged for commit, not committed or unstaged ones —
+    the pre-commit fast path. Builds a throwaway git repo so the test owns the index state."""
+    global failed
+    print("\n--- --staged scope ---")
+    import tempfile, shutil
+    tmp = tempfile.mkdtemp(prefix="ggs-staged-")
+    try:
+        def git(*a):
+            return subprocess.run(["git", "-C", tmp, *a], capture_output=True, text=True)
+        if git("init", "-q").returncode != 0:
+            print("  SKIP: git unavailable")
+            return
+        git("config", "user.email", "t@t.co"); git("config", "user.name", "t")
+        # secret in a committed file (must be ignored by --staged)
+        with open(os.path.join(tmp, "committed.js"), "w") as f:
+            f.write('const k = "AKIA' + "ABCDEFGHIJKLMNOP" + '";\n')
+        git("add", "committed.js"); git("commit", "-q", "-m", "init")
+        # secret in a staged file (must be found) and an unstaged file (must be ignored)
+        with open(os.path.join(tmp, "staged.js"), "w") as f:
+            f.write('const t = "ghp_' + "A" * 32 + '";\n')
+        with open(os.path.join(tmp, "unstaged.js"), "w") as f:
+            f.write('const u = "AKIA' + "ZZZZZZZZZZZZZZZZ" + '";\n')
+        git("add", "staged.js")
+        r = subprocess.run([sys.executable, SCAN_PY, tmp, "--mode", "quick", "--staged"],
+                           capture_output=True, text=True)
+        doc = json.loads(r.stdout)
+        files = {f["file"] for f in doc["findings"]}
+        if files == {"staged.js"}:
+            print("  PASS: only the staged file was scanned")
+        else:
+            failed = True
+            print(f"  FAIL: scanned files = {sorted(files)} (wanted just staged.js)")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_false_positives(mode):
     global failed
     target = os.path.join(FIXTURES, "false-positives")
@@ -350,6 +454,9 @@ if __name__ == "__main__":
     test_secrets_redacted()
     test_scrub_covers_token_formats()
     test_long_line_bundle()
+    test_sarif_output()
+    test_fail_on_exit_code()
+    test_staged_scope()
     test_findings_exact("quick")
     test_findings_exact("readme")
     test_false_positives("quick")

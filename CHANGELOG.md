@@ -4,6 +4,37 @@ All notable changes to Git Gud Security are recorded here. Versioning is
 [SemVer](https://semver.org/). Pre-1.0: behavior and check IDs may still change between
 minor versions.
 
+## [0.2.0] - 2026-06-30
+
+Adds the workflow integrations the deterministic tier was missing: a pre-commit hook, SARIF
+output for GitHub code scanning, and a staged-files fast path. No new checks; the check
+library is unchanged at 332. The default output format is still JSON, so the skill is
+unaffected.
+
+### Added
+
+- **Pre-commit hook.** `.pre-commit-hooks.yaml` ships two hooks — `git-gud-security`
+  (scans staged files, blocks the commit on high+ findings) and `git-gud-security-warn`
+  (same scan, warn-only). Point `.pre-commit-config.yaml` at the repo and `pre-commit
+  install`. Answers the most-asked question: yes, it hooks into pre-commit.
+- **`--staged`.** Scans only files staged for commit (`git diff --cached`), so the
+  pre-commit path stays fast on big repos. Falls back to a whole-tree scan with a notice
+  when git isn't present. Committed and unstaged changes are out of scope by design.
+- **`--fail-on {critical,high,medium,low}`.** Exits nonzero when a finding at or above the
+  given severity is present, so a hook or CI step can block. Opt-in: findings are
+  candidates, so the default still exits 0.
+- **`--format {json,sarif,text}`.** `sarif` emits SARIF 2.1.0 (one rule per check id,
+  `security-severity` set) for the GitHub Security tab and inline PR annotations; `text` is
+  a terse human summary for the pre-commit path. `json` stays the default; `--json` is kept
+  as an alias.
+- **`ROADMAP.md`** — direction and the deterministic-vs-LLM architectural line.
+
+### Tests
+
+- SARIF validity (result-per-finding, 1-based regions, rules present), `--fail-on` exit
+  codes (blocks when dirty, passes when clean, never blocks without the flag), and
+  `--staged` scope (a throwaway git repo proves only staged files are scanned).
+
 ## [0.1.1] - 2026-06-30
 
 Bug-fix release. No new checks. Scan output changes: some findings are now correctly
@@ -66,5 +97,6 @@ First tagged release. Usable, not yet API-stable.
   ID alignment checks.
 - GitHub Actions runs the suite on push and PRs across Python 3.8 and 3.12.
 
+[0.2.0]: https://github.com/kidsmeal/git-gud-security/releases/tag/v0.2.0
 [0.1.1]: https://github.com/kidsmeal/git-gud-security/releases/tag/v0.1.1
 [0.1.0]: https://github.com/kidsmeal/git-gud-security/releases/tag/v0.1.0

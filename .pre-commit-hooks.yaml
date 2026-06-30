@@ -1,0 +1,35 @@
+# Git Gud Security — pre-commit hooks.
+#
+# Add to your repo's .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/kidsmeal/git-gud-security
+#       rev: v0.2.0
+#       hooks:
+#         - id: git-gud-security          # quick scan of staged files, blocks on high+
+#
+# Then: pre-commit install
+#
+# The hook runs the deterministic sweep (secrets + dangerous patterns + config red flags)
+# over staged files only, so it's fast. It blocks the commit when a finding at or above
+# the --fail-on severity is present. Findings are CANDIDATES — tune --fail-on / --mode in
+# `args:` to taste, or use the warn-only hook below to surface findings without blocking.
+
+- id: git-gud-security
+  name: git gud security (staged scan)
+  description: Deterministic secret/pattern/config sweep over staged files; blocks the commit on high+ findings.
+  entry: scripts/scan.py
+  language: script
+  pass_filenames: false
+  always_run: true
+  args: ['.', '--mode', 'quick', '--staged', '--format', 'text', '--fail-on', 'high']
+
+- id: git-gud-security-warn
+  name: git gud security (staged scan, warn only)
+  description: Same staged sweep, but prints findings without failing the commit.
+  entry: scripts/scan.py
+  language: script
+  pass_filenames: false
+  always_run: true
+  verbose: true
+  args: ['.', '--mode', 'quick', '--staged', '--format', 'text']

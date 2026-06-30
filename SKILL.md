@@ -231,7 +231,10 @@ target repo's config precedence.
 - `references/readme-redflags.md` — the phrase-to-hole lookup for `readme` mode. Generated. Load
   this instead of the full `checks.md` for a README-only pass; it's the fast path.
 - `references/ultra-workflow.md` — the adversarial multi-agent `Workflow` script for ultra mode.
-- `scripts/scan.py` — the deterministic sweep (secrets + patterns + config). Emits JSON.
+- `scripts/scan.py` — the deterministic sweep (secrets + patterns + config). Emits JSON by
+  default; `--format sarif` for GitHub code scanning, `--format text` for a terse summary.
+  `--staged` scans only staged files and `--fail-on <severity>` exits nonzero to block —
+  together these back the pre-commit hook in `.pre-commit-hooks.yaml`.
 - `scripts/patterns.json` — the machine-readable pattern library `scan.py` reads (the grep/config
   subset of `checks.md`, linked by `id`).
 - `scripts/checks.data.json` + `scripts/build_checks.py` — structured source of the check library

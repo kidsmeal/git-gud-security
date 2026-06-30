@@ -9,7 +9,7 @@ Covers app security (Supabase, Firebase, Cloudflare Workers, Next.js, Flutter, E
 Clone into your skills directory. Pin to a release tag (recommended for a security tool, so you know exactly what's running):
 
 ```bash
-git clone --branch v0.1.1 https://github.com/kidsmeal/git-gud-security ~/.claude/skills/git-gud-security
+git clone --branch v0.2.0 https://github.com/kidsmeal/git-gud-security ~/.claude/skills/git-gud-security
 ```
 
 Or track the latest:
@@ -61,7 +61,39 @@ python scripts/scan.py /path/to/repo --mode quick --exclude references tests fix
 
 The script does the two deterministic modes: `readme` (prose red-flag phrase scan + config/filename checks) and `quick` (that plus the full pattern sweep and a secret/sourcemap sweep of build output). `full` and `ultra` need an LLM for dataflow tracing and adversarial verification, so they only run through the skill; the script exits with a pointer if you ask for them.
 
-Outputs JSON. Secrets are redacted. Output is **candidate findings**, not confirmed vulnerabilities. Each hit needs human or LLM review at the cited `file:line` to confirm it's real (not a comment, test fixture, example, or safe public key); readme-tier matches are inferred from prose and marked `inferred`. When run as a Claude Code skill, that confirmation step happens automatically. When run standalone, you're looking at raw candidates.
+Outputs JSON by default. Secrets are redacted. Output is **candidate findings**, not confirmed vulnerabilities. Each hit needs human or LLM review at the cited `file:line` to confirm it's real (not a comment, test fixture, example, or safe public key); readme-tier matches are inferred from prose and marked `inferred`. When run as a Claude Code skill, that confirmation step happens automatically. When run standalone, you're looking at raw candidates.
+
+Flags for hooking into a workflow:
+
+| Flag | Effect |
+|---|---|
+| `--staged` | scan only files staged for commit (`git diff --cached`) — the pre-commit fast path |
+| `--fail-on critical\|high\|medium\|low` | exit nonzero if a finding at or above that severity is present, so a hook or CI step blocks |
+| `--format json\|sarif\|text` | `json` (default), `sarif` for GitHub code scanning, `text` for a terse human summary |
+
+## Pre-commit hook
+
+Scan staged files on every commit and block on high+ findings. Add to `.pre-commit-config.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/kidsmeal/git-gud-security
+    rev: v0.2.0
+    hooks:
+      - id: git-gud-security        # blocks the commit on high+ findings
+      # - id: git-gud-security-warn # or: print findings without blocking
+```
+
+Then `pre-commit install`. The hook runs `--mode quick --staged --fail-on high`; override `args:` in your config to change the mode or threshold. Findings are candidates, so the warn-only hook is there if you'd rather surface than block.
+
+## CI / GitHub code scanning
+
+`--format sarif` emits SARIF 2.1.0, which GitHub ingests into the Security tab and as inline PR annotations:
+
+```bash
+python scripts/scan.py . --mode quick --format sarif --out ggs.sarif
+# then upload ggs.sarif via github/codeql-action/upload-sarif
+```
 
 ## Check library
 
@@ -74,6 +106,10 @@ python scripts/build_checks.py
 ```
 
 `scripts/patterns.json` is the scanner's pattern set (grep/config subset, linked by id). `references/ultra-workflow.md` is the adversarial workflow for ultra mode.
+
+## Direction
+
+Where this is headed — own the AI/agent supply-chain surface, keep the standalone core light: [ROADMAP.md](ROADMAP.md).
 
 ## Limitations
 
