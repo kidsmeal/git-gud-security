@@ -79,6 +79,23 @@ def test_true_positives(mode):
         print(f"  PASS: all {len(expected_ids)} expected patterns fired ({len(unexpected)} extra)")
 
 
+def test_version_in_sync():
+    """scan.py __version__ must match the top entry in CHANGELOG.md."""
+    global failed
+    print("\n--- version sync ---")
+    import re
+    changelog = os.path.join(ROOT, "CHANGELOG.md")
+    with open(changelog, encoding="utf-8") as f:
+        text = f.read()
+    m = re.search(r"##\s*\[(\d+\.\d+\.\d+)\]", text)
+    top = m.group(1) if m else None
+    if top == scan.__version__:
+        print(f"  PASS: scan.py and CHANGELOG agree on {top}")
+    else:
+        print(f"  FAIL: scan.py={scan.__version__}, CHANGELOG top={top}")
+        failed = True
+
+
 def test_every_pattern_has_fixture():
     """Rigorous coverage: every individual pattern ENTRY must fire on a fixture, not just
     every unique id. Six ids map to two patterns each, so an id-only check could let a
@@ -203,6 +220,7 @@ if __name__ == "__main__":
     test_json_valid()
     test_pattern_check_alignment()
     test_counts_match()
+    test_version_in_sync()
     test_every_pattern_has_fixture()
     test_full_ultra_route_to_skill()
     test_true_positives("quick")

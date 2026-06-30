@@ -27,6 +27,8 @@ import os
 import re
 import sys
 
+__version__ = "0.1.0"
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Dependency / cache / IDE dirs: never scanned at all.
@@ -350,6 +352,7 @@ def main():
         description="Git Gud Security deterministic sweep. Output is CANDIDATE findings "
                     "that need confirmation at file:line before reporting.")
     ap.add_argument("repo")
+    ap.add_argument("--version", action="version", version=f"git-gud-security {__version__}")
     ap.add_argument("--mode", default="quick", choices=["readme", "quick", "full", "ultra"])
     ap.add_argument("--json", action="store_true", help="(default) emit JSON")
     ap.add_argument("--out", default=None)
@@ -407,6 +410,7 @@ def main():
 
     out = {
         "tool": "git-gud-security",
+        "version": __version__,
         "mode": args.mode,
         "repo": root.replace("\\", "/"),
         "scanned": {"files": files_scanned, "pattern_count": len(patterns)},

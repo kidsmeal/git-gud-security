@@ -1,5 +1,6 @@
 {
   "tool": "git-gud-security",
+  "version": "0.1.0",
   "mode": "readme",
   "repo": "C:/Users/atk67/Documents/git-gud-security/tests/fixtures/true-positives",
   "scanned": {
