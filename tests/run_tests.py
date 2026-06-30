@@ -366,6 +366,49 @@ def test_staged_scope():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_action_manifest():
+    """The composite action must be wired correctly: a scan step that runs the bundled
+    scan.py, a SARIF upload step, and — critically for a security tool — inputs passed via
+    `env`, never interpolated as ${{ }} into a run script (the Actions injection hole this
+    tool flags). Skips cleanly if PyYAML isn't installed."""
+    global failed
+    print("\n--- GitHub Action manifest ---")
+    try:
+        import yaml
+    except ImportError:
+        print("  SKIP: PyYAML not installed")
+        return
+    path = os.path.join(ROOT, "action.yml")
+    if not os.path.isfile(path):
+        failed = True
+        print("  FAIL: action.yml missing")
+        return
+    with open(path, encoding="utf-8") as f:
+        raw = f.read()
+        doc = yaml.safe_load(raw)
+    problems = []
+    steps = doc.get("runs", {}).get("steps", [])
+    run_blocks = "\n".join(s.get("run", "") for s in steps)
+    if doc.get("runs", {}).get("using") != "composite":
+        problems.append("not a composite action")
+    if "scripts/scan.py" not in run_blocks:
+        problems.append("no step runs scripts/scan.py")
+    if not any("upload-sarif" in str(s.get("uses", "")) for s in steps):
+        problems.append("no SARIF upload step")
+    # Expression-injection guard: inputs must reach the shell via env, not be spliced into run:.
+    import re
+    for s in steps:
+        body = s.get("run", "")
+        if re.search(r"\$\{\{\s*inputs\.", body):
+            problems.append(f"step '{s.get('name','?')}' interpolates inputs into run: "
+                            f"(injection risk — pass via env instead)")
+    if problems:
+        failed = True
+        print(f"  FAIL: {'; '.join(problems)}")
+    else:
+        print(f"  PASS: composite, runs scan.py, uploads SARIF, no inputs spliced into run:")
+
+
 def test_false_positives(mode):
     global failed
     target = os.path.join(FIXTURES, "false-positives")
@@ -469,6 +512,7 @@ if __name__ == "__main__":
     test_sarif_output()
     test_fail_on_exit_code()
     test_staged_scope()
+    test_action_manifest()
     test_findings_exact("quick")
     test_findings_exact("readme")
     test_false_positives("quick")

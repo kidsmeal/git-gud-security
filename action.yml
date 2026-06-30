@@ -1,0 +1,80 @@
+name: "Git Gud Security"
+description: "Deterministic security scan (secrets, dangerous patterns, config red flags) with SARIF upload to GitHub code scanning."
+author: "kidsmeal"
+branding:
+  icon: "shield"
+  color: "green"
+
+inputs:
+  path:
+    description: "Directory to scan."
+    required: false
+    default: "."
+  mode:
+    description: "Scan mode: readme or quick. (full/ultra need the Claude Code skill and won't run here.)"
+    required: false
+    default: "quick"
+  exclude:
+    description: "Space-separated directories to skip (e.g. 'tests fixtures vendor')."
+    required: false
+    default: ""
+  fail-on:
+    description: "Fail the job if a finding at or above this severity is present: critical, high, medium, or low. Empty (default) annotates without blocking — findings are candidates, so blocking is opt-in."
+    required: false
+    default: ""
+  sarif-file:
+    description: "Path to write the SARIF file."
+    required: false
+    default: "git-gud-security.sarif"
+  upload-sarif:
+    description: "Upload the SARIF to GitHub code scanning (Security tab + inline PR annotations). Needs `security-events: write` and code scanning enabled (free on public repos)."
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    # Produce SARIF. No --fail-on here, so this always exits 0 and the file is written even
+    # when there are findings — the gate is a separate, later step so the upload still happens.
+    # Inputs are passed via env, never interpolated into the script, to avoid expression
+    # injection (the exact GitHub Actions hole this tool flags in others).
+    - name: Run Git Gud Security scan
+      shell: bash
+      env:
+        GGS_ACTION_PATH: ${{ github.action_path }}
+        GGS_PATH: ${{ inputs.path }}
+        GGS_MODE: ${{ inputs.mode }}
+        GGS_EXCLUDE: ${{ inputs.exclude }}
+        GGS_SARIF: ${{ inputs.sarif-file }}
+      run: |
+        set -euo pipefail
+        EX=""
+        if [ -n "${GGS_EXCLUDE}" ]; then EX="--exclude ${GGS_EXCLUDE}"; fi
+        python3 "${GGS_ACTION_PATH}/scripts/scan.py" "${GGS_PATH}" \
+          --mode "${GGS_MODE}" --format sarif --out "${GGS_SARIF}" ${EX}
+
+    # Upload to code scanning. Pinned to the v3 major; maintainers may pin a full SHA to match
+    # the repo's other workflows. Runs even if a later gate would fail, since it precedes it.
+    - name: Upload SARIF to code scanning
+      if: ${{ inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-file }}
+
+    # Optional gate. Re-runs the (fast, deterministic) scan in text form so the log shows a
+    # readable summary, and exits nonzero when the threshold is met to fail the job.
+    - name: Enforce severity gate
+      if: ${{ inputs.fail-on != '' }}
+      shell: bash
+      env:
+        GGS_ACTION_PATH: ${{ github.action_path }}
+        GGS_PATH: ${{ inputs.path }}
+        GGS_MODE: ${{ inputs.mode }}
+        GGS_EXCLUDE: ${{ inputs.exclude }}
+        GGS_FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        set -euo pipefail
+        EX=""
+        if [ -n "${GGS_EXCLUDE}" ]; then EX="--exclude ${GGS_EXCLUDE}"; fi
+        python3 "${GGS_ACTION_PATH}/scripts/scan.py" "${GGS_PATH}" \
+          --mode "${GGS_MODE}" --format text --fail-on "${GGS_FAIL_ON}" ${EX}

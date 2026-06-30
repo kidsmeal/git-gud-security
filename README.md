@@ -86,13 +86,36 @@ repos:
 
 Then `pre-commit install`. The hook runs `--mode quick --staged --fail-on high`; override `args:` in your config to change the mode or threshold. Findings are candidates, so the warn-only hook is there if you'd rather surface than block.
 
-## CI / GitHub code scanning
+## GitHub Action
 
-`--format sarif` emits SARIF 2.1.0, which GitHub ingests into the Security tab and as inline PR annotations:
+Scan every push and PR, with findings posted inline on the PR and into the Security tab. Add a workflow to your repo:
+
+```yaml
+# .github/workflows/security.yml
+name: git gud security
+on: [push, pull_request]
+permissions:
+  contents: read
+  security-events: write   # required to upload to code scanning
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: kidsmeal/git-gud-security@v0.2.0
+        # with:
+        #   mode: quick            # or readme
+        #   exclude: tests vendor  # dirs to skip
+        #   fail-on: high          # block the build on high+ (default: annotate only)
+```
+
+By default it annotates without failing the build (findings are candidates). Set `fail-on:` to block. Code scanning is free on public repos; private repos need GitHub Advanced Security.
+
+To run the scan in CI without the Action (or to upload the SARIF yourself):
 
 ```bash
 python scripts/scan.py . --mode quick --format sarif --out ggs.sarif
-# then upload ggs.sarif via github/codeql-action/upload-sarif
+# then: github/codeql-action/upload-sarif with sarif_file: ggs.sarif
 ```
 
 SARIF is split into one **run per engine** — `deterministic` (this script) and `llm` (the skill's dataflow/adversarial findings) — each with its own `automationDetails.id`, so GitHub renders them as separate analyses and you can gate CI on each independently (hard-fail deterministic, warn on single-pass llm). Every finding also carries an `engine` field in the JSON output. The standalone script only produces deterministic findings, so on its own it emits a single run.

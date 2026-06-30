@@ -40,7 +40,8 @@ ends in a slow, false-positive-spewing tool nobody runs.
   categories, 80 patterns, fixture-backed tests + CI, redaction, severity sync.
 - **0.2.0** — pre-commit hook (`.pre-commit-hooks.yaml`), `--staged` fast path, `--fail-on`
   severity gate, SARIF 2.1.0 output for GitHub code scanning (split into per-engine runs,
-  see below), terse `text` format.
+  see below), terse `text` format, and a reusable **GitHub Action** (`action.yml`) for CI
+  scanning + SARIF upload.
 
 ## Decision: deterministic and LLM findings are separate SARIF runs
 
@@ -68,10 +69,12 @@ Roughly in priority order. Each is meant to keep the script light and standalone
    the gap that most limits adoption right now.
 2. **Diff against a ref.** `--diff <ref>` (not just `--staged`) so CI can scan only what a PR
    changed against its base. Pairs with the baseline.
-3. **Pre-install supply-chain gate.** `scan <github-url>` — fetch an untrusted third-party
-   skill / MCP server / plugin into isolation and scan it *before* it lands in `~/.claude`.
-   The "Scanning a hostile repo safely" section in SKILL.md is already the design; this is the
-   front door. This is the headline feature that gives GGS an identity no other scanner has.
+3. **Pre-install supply-chain gate (0.3.0 headline).** `git gud, is this skill safe to
+   install?` — fetch an untrusted third-party skill / MCP server / plugin from a URL into
+   isolation and scan it *before* it lands in `~/.claude`. The "Scanning a hostile repo safely"
+   section in SKILL.md is already the design; this is the front door, and the one feature that
+   gives GGS an identity no other scanner has (the thing it audits is other people's agent
+   code). Full spec: [`docs/pre-install-gate.md`](docs/pre-install-gate.md).
 4. **Distribution that stays light.** `uvx git-gud-security` / pipx, and a published GitHub
    Action wrapping `quick` + SARIF upload. Adoption-light, zero new runtime deps.
 5. **Sharpen the AI/agent categories.** Deepen MCP, skills/plugins/hooks, and coding-agent

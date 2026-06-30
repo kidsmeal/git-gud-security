@@ -33,7 +33,14 @@ unaffected.
   renders them as distinct analyses and CI can gate them independently (hard-fail deterministic,
   warn on single-pass llm). Every finding now carries an `engine` field in JSON too. The
   standalone script only produces deterministic findings, so today that's a single run.
+- **GitHub Action.** A reusable composite action (`action.yml`) so a repo gets a CI scan with
+  SARIF upload by adding `uses: kidsmeal/git-gud-security@v0.2.0` to a workflow. Annotates by
+  default (findings are candidates); `fail-on:` blocks. Inputs passed via `env`, never
+  interpolated into the run script, to avoid the Actions expression-injection hole this tool
+  itself flags.
 - **`ROADMAP.md`** — direction and the deterministic-vs-LLM architectural line.
+- **`docs/pre-install-gate.md`** — spec for the 0.3.0 headline: vetting a third-party skill /
+  MCP / plugin from a URL before it's installed.
 
 ### Tests
 
