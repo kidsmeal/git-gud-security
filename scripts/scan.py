@@ -252,11 +252,15 @@ def check_env_hygiene(root):
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        description="Git Gud Security deterministic sweep. Output is CANDIDATE findings "
+                    "that need confirmation at file:line before reporting.")
     ap.add_argument("repo")
     ap.add_argument("--mode", default="quick", choices=["readme", "quick", "full"])
     ap.add_argument("--json", action="store_true", help="(default) emit JSON")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--exclude", nargs="*", default=[], metavar="DIR",
+                    help="additional directories to skip (e.g. --exclude references tests)")
     args = ap.parse_args()
 
     root = os.path.abspath(args.repo)
@@ -264,7 +268,14 @@ def main():
         print(json.dumps({"error": f"not a directory: {root}"}))
         sys.exit(1)
 
+    if args.exclude:
+        SKIP_DIRS.update(args.exclude)
+
     patterns, do_redact = load_patterns()
+
+    print(f"git-gud-security: {len(patterns)} patterns, mode={args.mode}. "
+          f"Output is candidate findings, not confirmed vulnerabilities.",
+          file=sys.stderr)
 
     if args.mode == "readme":
         # readme mode: config/filename checks only, no grep patterns
