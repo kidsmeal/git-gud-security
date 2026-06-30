@@ -623,6 +623,10 @@ def main():
                          "touches your machine. The target is never executed.")
     ap.add_argument("--ref", default=None,
                     help="branch or tag to pin the --url fetch to (default: the repo's HEAD)")
+    ap.add_argument("--keep", action="store_true",
+                    help="with --url: don't delete the isolated checkout after scanning, and "
+                         "print its path, so the skill's full/ultra tiers can read it under the "
+                         "hostile-repo posture. The caller must delete it when done.")
     ap.add_argument("--version", action="version", version=f"git-gud-security {__version__}")
     ap.add_argument("--mode", default="quick", choices=["readme", "quick", "full", "ultra"])
     ap.add_argument("--json", action="store_true", help="(deprecated alias for --format json)")
@@ -680,6 +684,12 @@ def main():
             gate_meta = {"url": url, "ref": args.ref, "sha": sha,
                          "artifact": artifact["primary"], "signals": artifact["signals"],
                          "evidence": artifact["evidence"]}
+            if args.keep:
+                # Hand the isolated checkout to the caller (the skill's full/ultra tiers read
+                # it under the hostile-repo posture) instead of deleting it.
+                gate_meta["checkout"] = root.replace("\\", "/")
+                print(f"git-gud-security: isolated checkout kept at {root} "
+                      f"(delete it when done)", file=sys.stderr)
         except gate.GateError as e:
             gate.cleanup(gate_workdir)
             print(json.dumps({"error": f"gate fetch failed: {e}"}))
@@ -767,8 +777,10 @@ def main():
         out["gate"] = gate_meta
 
     # The findings already carry their snippets, so the isolated checkout is no longer needed.
-    # Delete it before any --fail-on exit so a gate run never leaves a temp clone behind.
-    gate.cleanup(gate_workdir)
+    # Delete it before any --fail-on exit so a gate run never leaves a temp clone behind —
+    # unless --keep asked to hand it to the caller for deeper (full/ultra) reading.
+    if not args.keep:
+        gate.cleanup(gate_workdir)
     if args.format == "sarif":
         payload = json.dumps(to_sarif(out), indent=2)
     elif args.format == "text":
