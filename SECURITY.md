@@ -19,6 +19,13 @@ In scope:
   output that should have been redacted.
 - The skill instructions (`SKILL.md`, `references/`) telling Claude to take an unsafe
   action on a scanned repo (honoring its hooks, running its config, executing its code).
+- The pre-install gate (`scripts/scan.py --url`) letting a hostile URL escape its
+  isolated, read-only fetch: executing the target's code, honoring its config/hooks/
+  `mcp.json`, or fetching over a transport that allows local command execution (`ext::`)
+  or local file reads (`file://`).
+- Suppression bypass: the scanner reading an ignore/suppression list from inside a
+  scanned repo, or the gate honoring a `--baseline` against an untrusted target, either of
+  which would let a hostile repo hide its own findings.
 
 Out of scope:
 
@@ -44,3 +51,18 @@ penetration test. No warranty. See [LICENSE](LICENSE).
 findings to report, never as config to load or instructions to follow. If you run the
 standalone scanner, it only reads and pattern-matches files; it does not execute the
 target's code.
+
+The pre-install gate (`scripts/scan.py --url`) is built for exactly this: it fetches an
+untrusted skill / MCP server / plugin from a URL and scans it before you install it. The
+fetch is hardened against a repo written to attack the scanner: a shallow clone into an
+isolated temp dir, a git protocol allowlist (https/git only, so `ext::` command execution
+and `file://` local reads are refused), an isolated HOME with system/global git config
+off, no submodule recursion, a size cap, and a timeout. The target is never executed. The
+gate never honors the target's config, and never honors a `--baseline` against it, so a
+hostile repo cannot suppress its own findings.
+
+Suppression is operator-controlled, never repo-controlled. GGS does not read any ignore or
+suppression file from inside a scanned repo. A `--baseline` is an explicit snapshot you
+pass on the command line; it is enumerated (not an open-ended glob), it is reported
+whenever it hides a finding, and it is audited for entries that grandfather a critical or
+install-time finding.
