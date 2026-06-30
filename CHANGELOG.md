@@ -4,6 +4,30 @@ All notable changes to Git Gud Security are recorded here. Versioning is
 [SemVer](https://semver.org/). Pre-1.0: behavior and check IDs may still change between
 minor versions.
 
+## [0.1.1] - 2026-06-30
+
+Bug-fix release. No new checks. Scan output changes: some findings are now correctly
+critical (were under-rated), and secrets in minified bundles are now found, so a scan of
+the same repo may surface more than v0.1.0 did.
+
+### Fixed
+
+- **Severity drift (correctness).** 26 of 80 patterns emitted a severity one level below
+  the source-of-truth check library (e.g. `service-role-key-in-client` was `high` vs the
+  library's `critical`), under-grading findings. Synced to `checks.data.json`.
+- **Incomplete redaction (safety).** A SendGrid / Twilio / DigitalOcean token on a line
+  that also matched a non-secret pattern printed in cleartext, because the global scrub
+  regex wasn't a superset of the formats the patterns detect. Added the missing formats.
+- **Minified-bundle coverage.** A secret past byte 5000 of a one-line bundle was missed
+  because each line was truncated before matching. Long lines are now scanned in
+  overlapping windows, so the whole line is covered while each match stays bounded.
+
+### Tests
+
+- Findings are asserted against exact `(id, file, line, severity)` goldens (fail on missing
+  or extra), regenerated only via `--update`. Added locks for severity sync, scrub coverage,
+  redaction (no token in cleartext), and long-line bundle coverage.
+
 ## [0.1.0] - 2026-06-30
 
 First tagged release. Usable, not yet API-stable.
@@ -42,4 +66,5 @@ First tagged release. Usable, not yet API-stable.
   ID alignment checks.
 - GitHub Actions runs the suite on push and PRs across Python 3.8 and 3.12.
 
+[0.1.1]: https://github.com/kidsmeal/git-gud-security/releases/tag/v0.1.1
 [0.1.0]: https://github.com/kidsmeal/git-gud-security/releases/tag/v0.1.0

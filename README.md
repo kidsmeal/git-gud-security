@@ -9,7 +9,7 @@ Covers app security (Supabase, Firebase, Cloudflare Workers, Next.js, Flutter, E
 Clone into your skills directory. Pin to a release tag (recommended for a security tool, so you know exactly what's running):
 
 ```bash
-git clone --branch v0.1.0 https://github.com/kidsmeal/git-gud-security ~/.claude/skills/git-gud-security
+git clone --branch v0.1.1 https://github.com/kidsmeal/git-gud-security ~/.claude/skills/git-gud-security
 ```
 
 Or track the latest:
