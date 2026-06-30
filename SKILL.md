@@ -132,8 +132,7 @@ before they reach the user. Read `references/ultra-workflow.md` for the script t
 
 A different motion from the modes above. The modes scan a repo you already have checked out. The
 gate vets an **untrusted** skill / MCP server / plugin **from a URL, before it touches the
-machine**. This is the one job no generic scanner does, and the exact surface this skill's check
-library is built for.
+machine**. This is the surface this skill's check library is built for.
 
 Route to the gate (not a local scan) when the user names a URL or `owner/repo` plus install
 intent: "is this skill safe to install? `<url>`", "git gud gate `<url>`", "is it safe to add this

@@ -155,8 +155,7 @@ SARIF is split into one **run per engine** — `deterministic` (this script) and
 
 Every mode above scans a repo you already trust enough to check out. The gate is the opposite
 motion: it scans an **untrusted** skill, MCP server, or plugin **from a URL, before it touches
-your machine**. This is the audience this tool is built for, people installing agent tooling, and
-the surface no generic scanner covers.
+your machine**. This is the audience this tool is built for: people installing agent tooling.
 
 Through the skill, conversationally:
 

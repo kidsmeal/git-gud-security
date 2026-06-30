@@ -15,8 +15,8 @@ start, shell out on model-supplied input, or carry a prompt-injection payload in
 
 Every existing scanner assumes you already trust the code enough to have it checked out in your
 project. The gate inverts that: **scan untrusted agent code, from a URL, before it touches your
-machine.** This is the one job no generic SAST tool does, and the thing GGS's check library is
-already built for (the MCP / skills / plugins / agent-config categories).
+machine.** This is what GGS's check library is already built for (the MCP / skills / plugins /
+agent-config categories).
 
 ## Invocation
 
@@ -93,10 +93,10 @@ The scanner reads code written by someone trying to attack the scanner. Non-nego
 ## Why this is the headline, not the Action
 
 The Action and pre-commit hook consume the deterministic engine for people who already trust
-their own code. The gate is the opposite motion: it serves the exact audience starring GGS —
-people building and installing agent tooling — and audits the exact surface (skills, MCP,
-plugins) that no other scanner covers. It's the feature that makes "a security scanner for the
-things people build with Claude" literally true at install time.
+their own code. The gate is the opposite motion: it serves the audience starring GGS (people
+building and installing agent tooling) and audits the surface GGS is built for (skills, MCP,
+plugins). It's the feature that makes "a security scanner for the things people build with
+Claude" literally true at install time.
 
 ## Open questions
 
