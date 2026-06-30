@@ -12,6 +12,9 @@ venv/
 _ggs_fix*/
 *.tmp
 
+# Research/orchestration workflow scripts (local tooling, not shipped with the skill)
+scripts/*.workflow.js
+
 # OS / editor
 .DS_Store
 Thumbs.db
