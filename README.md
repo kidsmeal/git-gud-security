@@ -1,5 +1,11 @@
 # Git Gud Security
 
+[![Tests](https://img.shields.io/github/actions/workflow/status/kidsmeal/git-gud-security/test.yml?branch=main&label=tests)](https://github.com/kidsmeal/git-gud-security/actions/workflows/test.yml)
+[![Release](https://img.shields.io/github/v/release/kidsmeal/git-gud-security)](https://github.com/kidsmeal/git-gud-security/releases)
+[![License: MIT](https://img.shields.io/github/license/kidsmeal/git-gud-security)](LICENSE)
+![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue)
+![No dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
+
 A free security tool for solo AI devs: check the skills, MCP servers, agents, and apps you build before you ship them, without paying for a service. No account, no subscription. The fast scan runs entirely on your machine.
 
 Most of what burns people isn't exotic: a service_role key pasted into the frontend, RLS left off "for dev," a committed `.env` with live keys, an MCP tool that runs `exec()` on model-supplied input, a SKILL.md trying to redirect your agent. It looks for those and reports them plainly, with the file and line.

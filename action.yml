@@ -48,10 +48,15 @@ runs:
         GGS_SARIF: ${{ inputs.sarif-file }}
       run: |
         set -euo pipefail
-        EX=""
-        if [ -n "${GGS_EXCLUDE}" ]; then EX="--exclude ${GGS_EXCLUDE}"; fi
-        python3 "${GGS_ACTION_PATH}/scripts/scan.py" "${GGS_PATH}" \
-          --mode "${GGS_MODE}" --format sarif --out "${GGS_SARIF}" ${EX}
+        args=( "${GGS_PATH}" --mode "${GGS_MODE}" --format sarif --out "${GGS_SARIF}" )
+        # Build --exclude as an array, not a bare ${EX} string: read splits on whitespace
+        # without glob-expanding, so a glob like scripts/*.json reaches scan.py literally
+        # instead of being expanded against the runner's cwd by the shell.
+        if [ -n "${GGS_EXCLUDE}" ]; then
+          read -ra _ex <<< "${GGS_EXCLUDE}"
+          args+=( --exclude "${_ex[@]}" )
+        fi
+        python3 "${GGS_ACTION_PATH}/scripts/scan.py" "${args[@]}"
 
     # Upload to code scanning. Pinned to the v3 major; maintainers may pin a full SHA to match
     # the repo's other workflows. Runs even if a later gate would fail, since it precedes it.
@@ -74,7 +79,9 @@ runs:
         GGS_FAIL_ON: ${{ inputs.fail-on }}
       run: |
         set -euo pipefail
-        EX=""
-        if [ -n "${GGS_EXCLUDE}" ]; then EX="--exclude ${GGS_EXCLUDE}"; fi
-        python3 "${GGS_ACTION_PATH}/scripts/scan.py" "${GGS_PATH}" \
-          --mode "${GGS_MODE}" --format text --fail-on "${GGS_FAIL_ON}" ${EX}
+        args=( "${GGS_PATH}" --mode "${GGS_MODE}" --format text --fail-on "${GGS_FAIL_ON}" )
+        if [ -n "${GGS_EXCLUDE}" ]; then
+          read -ra _ex <<< "${GGS_EXCLUDE}"
+          args+=( --exclude "${_ex[@]}" )
+        fi
+        python3 "${GGS_ACTION_PATH}/scripts/scan.py" "${args[@]}"

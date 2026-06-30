@@ -367,17 +367,13 @@ def test_staged_scope():
 
 
 def test_action_manifest():
-    """The composite action must be wired correctly: a scan step that runs the bundled
-    scan.py, a SARIF upload step, and — critically for a security tool — inputs passed via
-    `env`, never interpolated as ${{ }} into a run script (the Actions injection hole this
-    tool flags). Skips cleanly if PyYAML isn't installed."""
+    """The composite action must be wired correctly: a scan step that runs the bundled scan.py,
+    a SARIF upload step, and — critically for a security tool — inputs passed via `env`, never
+    interpolated as ${{ }} into a run script (the Actions injection hole this tool flags). Uses
+    raw-text checks (no PyYAML) so it ALWAYS runs in CI rather than silently skipping."""
     global failed
+    import re
     print("\n--- GitHub Action manifest ---")
-    try:
-        import yaml
-    except ImportError:
-        print("  SKIP: PyYAML not installed")
-        return
     path = os.path.join(ROOT, "action.yml")
     if not os.path.isfile(path):
         failed = True
@@ -385,28 +381,44 @@ def test_action_manifest():
         return
     with open(path, encoding="utf-8") as f:
         raw = f.read()
-        doc = yaml.safe_load(raw)
     problems = []
-    steps = doc.get("runs", {}).get("steps", [])
-    run_blocks = "\n".join(s.get("run", "") for s in steps)
-    if doc.get("runs", {}).get("using") != "composite":
+    if not re.search(r'using:\s*["\']?composite["\']?', raw):
         problems.append("not a composite action")
-    if "scripts/scan.py" not in run_blocks:
+    if "scripts/scan.py" not in raw:
         problems.append("no step runs scripts/scan.py")
-    if not any("upload-sarif" in str(s.get("uses", "")) for s in steps):
+    if "upload-sarif" not in raw:
         problems.append("no SARIF upload step")
-    # Expression-injection guard: inputs must reach the shell via env, not be spliced into run:.
-    import re
-    for s in steps:
-        body = s.get("run", "")
-        if re.search(r"\$\{\{\s*inputs\.", body):
-            problems.append(f"step '{s.get('name','?')}' interpolates inputs into run: "
-                            f"(injection risk — pass via env instead)")
+    # Expression-injection guard: a ${{ ... }} expression is only dangerous inside a run: shell
+    # block, where it's spliced into the script before the shell runs. The same expression in
+    # env:/with:/if: is fine (Actions evaluates it, the shell never sees it). So flag ${{ }} only
+    # when it appears inside a run: block, tracked by indentation — no YAML parser needed.
+    in_run = False
+    run_indent = 0
+    for ln in raw.splitlines():
+        indent = len(ln) - len(ln.lstrip())
+        stripped = ln.strip()
+        if in_run:
+            if stripped and indent <= run_indent:
+                in_run = False  # dedented out of the block
+            elif "${{" in ln:
+                problems.append(f"${{{{ }}}} interpolated into a run: block (injection risk — "
+                                f"pass via env): {stripped[:50]!r}")
+                continue
+            else:
+                continue
+        rm = re.match(r'(\s*)run:\s*(.*)$', ln)
+        if rm:
+            run_indent = len(rm.group(1))
+            rest = rm.group(2).strip()
+            if rest in ("|", "|-", "|+", ">", ">-", ">+", ""):
+                in_run = True
+            elif "${{" in ln:
+                problems.append(f"${{{{ }}}} in a single-line run: (injection risk): {stripped[:50]!r}")
     if problems:
         failed = True
         print(f"  FAIL: {'; '.join(problems)}")
     else:
-        print(f"  PASS: composite, runs scan.py, uploads SARIF, no inputs spliced into run:")
+        print("  PASS: composite, runs scan.py, uploads SARIF, no inputs spliced into run:")
 
 
 def test_false_positives(mode):
