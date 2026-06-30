@@ -28,12 +28,14 @@ No third-party deps. Python 3.8+. The skill falls back to running patterns.json 
 Grep if Python is unavailable.
 """
 import argparse
+import fnmatch
 import json
 import os
 import re
 import subprocess
 import sys
 
+import baseline
 import gate
 
 __version__ = "0.3.0"
@@ -51,6 +53,12 @@ ALWAYS_SKIP = {
 # secret-in-bundle / sourcemap checks would otherwise be dead code.
 BUILD_OUTPUT = {"dist", "build", ".next", "out", ".nuxt", ".svelte-kit"}
 SKIP_DIRS = ALWAYS_SKIP | BUILD_OUTPUT
+
+# Path globs from --exclude that aren't bare dir names (e.g. scripts/checks.data.json,
+# **/*.min.js). Matched against a file's repo-relative path. Operator-supplied on the CLI only —
+# the scanner never reads an exclude/ignore list from inside a repo (that would let a hostile
+# target hide its own findings). Bare dir names still go to SKIP_DIRS for walk pruning.
+EXCLUDE_GLOBS = []
 
 # Binary / generated extensions to skip for content scanning.
 SKIP_EXTS = {
@@ -205,6 +213,28 @@ def rel(root, path):
         return path.replace("\\", "/")
 
 
+def split_excludes(entries):
+    """Partition --exclude entries into bare dir names (pruned during the walk) and path globs
+    (matched against a file's relative path). A bare name like `tests` is a dir; anything with a
+    slash or a glob metachar (`scripts/checks.data.json`, `**/*.min.js`) is a path glob."""
+    dirs, globs = [], []
+    for e in entries:
+        if "/" in e or any(c in e for c in "*?[]"):
+            globs.append(e.replace("\\", "/"))
+        else:
+            dirs.append(e)
+    return dirs, globs
+
+
+def path_excluded(rel_path):
+    """True if rel_path matches a --exclude path glob. A bare `a/b.json` also matches files
+    under `a/b.json/` is impossible, but a glob like `scripts/*` matches everything beneath."""
+    for g in EXCLUDE_GLOBS:
+        if fnmatch.fnmatch(rel_path, g) or fnmatch.fnmatch(rel_path, g.rstrip("/") + "/*"):
+            return True
+    return False
+
+
 def match_in_line(line, pat):
     """First `_any` hit not suppressed by a `_not` in the same window. Long lines are scanned
     in overlapping windows so a hit past MAX_LINE_LEN (a key in a one-line minified bundle) is
@@ -228,6 +258,8 @@ def scan_content(root, patterns, do_redact, files=None):
     files_scanned = 0
     for path in (iter_files(root) if files is None else files):
         if ext_of(path) in SKIP_EXTS:
+            continue
+        if EXCLUDE_GLOBS and path_excluded(rel(root, path)):
             continue
         try:
             if os.path.getsize(path) > MAX_FILE_BYTES:
@@ -703,7 +735,9 @@ def main():
         ap.error("a repo path or --url is required")
 
     if args.exclude:
-        SKIP_DIRS.update(args.exclude)
+        ex_dirs, ex_globs = split_excludes(args.exclude)
+        SKIP_DIRS.update(ex_dirs)
+        EXCLUDE_GLOBS.extend(ex_globs)
 
     patterns, do_redact = load_patterns()
 
@@ -745,6 +779,10 @@ def main():
     content_findings += prose_findings
 
     findings = content_findings + name_findings + env_findings
+    # Safety net for the path globs: filename/env/prose findings don't pass through
+    # scan_content's per-file check, so drop any whose path matches a --exclude glob here too.
+    if EXCLUDE_GLOBS:
+        findings = [f for f in findings if not path_excluded(f["file"])]
     sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     findings.sort(key=lambda f: (sev_order.get(f["severity"], 9), f["file"], f["line"]))
     # This script is the deterministic engine, so stamp every finding it produces accordingly
