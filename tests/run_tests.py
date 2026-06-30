@@ -492,6 +492,139 @@ def test_counts_match():
 
 
 import gate  # noqa: E402  (the pre-install gate's fetch + classify)
+import baseline  # noqa: E402  (the enumerated baseline)
+
+
+def test_exclude_glob():
+    """--exclude must accept a path glob (not just a bare dir name) and drop matching files'
+    findings — the self-scan corpus fix. A bare name still prunes the walk as before."""
+    global failed
+    print("\n--- --exclude path glob ---")
+    import tempfile, shutil
+    tmp = tempfile.mkdtemp(prefix="ggs-exg-")
+    try:
+        with open(os.path.join(tmp, "real.js"), "w") as f:
+            f.write('const k = "ghp_' + "A" * 32 + '";\n')
+        with open(os.path.join(tmp, "corpus.json"), "w") as f:
+            f.write('{"example": "ghp_' + "B" * 32 + '"}\n')
+        r = subprocess.run([sys.executable, SCAN_PY, tmp, "--mode", "quick",
+                            "--exclude", "*.json"], capture_output=True, text=True)
+        files = {f["file"] for f in json.loads(r.stdout)["findings"]}
+        if files == {"real.js"}:
+            print("  PASS: *.json glob excluded corpus.json, kept real.js")
+        else:
+            failed = True
+            print(f"  FAIL: findings in {sorted(files)} (wanted just real.js)")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_diff_scope():
+    """--diff <ref> must scan only files changed against the ref, not the whole tree — the CI
+    adoption path. Builds a throwaway repo so the test owns the history."""
+    global failed
+    print("\n--- --diff scope ---")
+    import tempfile, shutil
+    tmp = tempfile.mkdtemp(prefix="ggs-diff-")
+    try:
+        def git(*a):
+            return subprocess.run(["git", "-C", tmp, *a], capture_output=True, text=True)
+        if git("init", "-q").returncode != 0:
+            print("  SKIP: git unavailable"); return
+        git("config", "user.email", "t@t"); git("config", "user.name", "t")
+        with open(os.path.join(tmp, "old.js"), "w") as f:
+            f.write('const k = "ghp_' + "A" * 32 + '";\n')
+        git("add", "-A"); git("commit", "-q", "-m", "base")
+        with open(os.path.join(tmp, "new.js"), "w") as f:
+            f.write('const t = "ghp_' + "B" * 32 + '";\n')
+        # commit the change so it's a real diff against the base ref (the CI/PR shape); --diff,
+        # like --staged, scans tracked changes, not untracked files.
+        git("add", "new.js"); git("commit", "-q", "-m", "add new.js")
+        r = subprocess.run([sys.executable, SCAN_PY, tmp, "--mode", "quick", "--diff", "HEAD~1"],
+                           capture_output=True, text=True)
+        files = {f["file"] for f in json.loads(r.stdout)["findings"]}
+        if files == {"new.js"}:
+            print("  PASS: only the changed file (new.js) was scanned")
+        else:
+            failed = True
+            print(f"  FAIL: scanned {sorted(files)} (wanted just new.js)")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_baseline_fingerprint_stable():
+    """The fingerprint must be line-independent: the same finding at a different line is the same
+    fingerprint, so editing unrelated lines doesn't silently un-suppress it."""
+    global failed
+    print("\n--- baseline: line-independent fingerprint ---")
+    a = {"id": "x", "file": "a.js", "snippet": "ghp_REDACTED", "line": 1}
+    b = {"id": "x", "file": "a.js", "snippet": "ghp_REDACTED", "line": 99}  # same finding, moved
+    other = {"id": "x", "file": "b.js", "snippet": "ghp_REDACTED", "line": 1}  # different file
+    ok = (baseline.fingerprint(a) == baseline.fingerprint(b)
+          and baseline.fingerprint(a) != baseline.fingerprint(other))
+    if ok:
+        print("  PASS: line drift keeps the fingerprint; different file changes it")
+    else:
+        failed = True
+        print("  FAIL: fingerprint not line-independent / not file-sensitive")
+
+
+def test_baseline_roundtrip():
+    """write -> load -> partition: a snapshotted finding is suppressed, a new one is reported."""
+    global failed
+    print("\n--- baseline: write/load/partition ---")
+    import tempfile
+    old = {"id": "hardcoded-api-key-literal", "file": "old.js", "line": 1,
+           "severity": "critical", "snippet": "ghp_REDACTED", "install_time": False}
+    new = {"id": "hardcoded-api-key-literal", "file": "new.js", "line": 1,
+           "severity": "critical", "snippet": "sk_REDACTED", "install_time": False}
+    fd, path = tempfile.mkstemp(prefix="ggs-bl-", suffix=".json"); os.close(fd)
+    try:
+        baseline.write_baseline(path, [old], "test")
+        loaded = baseline.load(path)
+        fresh, supp = baseline.partition([old, new], loaded)
+        if [f["file"] for f in fresh] == ["new.js"] and [f["file"] for f in supp] == ["old.js"]:
+            print("  PASS: old finding suppressed, new finding reported")
+        else:
+            failed = True
+            print(f"  FAIL: fresh={[f['file'] for f in fresh]} supp={[f['file'] for f in supp]}")
+    finally:
+        os.remove(path)
+
+
+def test_baseline_audit():
+    """The audit must loudly flag a baseline that grandfathers a critical or install-time
+    finding — the no-silent-suppression policy. An attacker burying a critical trips this."""
+    global failed
+    print("\n--- baseline: audit grandfathered criticals ---")
+    import tempfile
+    crit = {"id": "hook-exfiltrates-env-or-credentials", "file": "hooks/x.sh", "line": 1,
+            "severity": "critical", "snippet": "cat ~/.aws", "install_time": True}
+    fd, path = tempfile.mkstemp(prefix="ggs-bla-", suffix=".json"); os.close(fd)
+    try:
+        baseline.write_baseline(path, [crit], "test")
+        warnings = baseline.audit(baseline.load(path))
+        if warnings and any("CRITICAL" in w for w in warnings) and any("install-time" in w for w in warnings):
+            print("  PASS: audit flagged the grandfathered critical + install-time entry")
+        else:
+            failed = True
+            print(f"  FAIL: audit warnings = {warnings}")
+    finally:
+        os.remove(path)
+
+
+def test_baseline_gate_refusal():
+    """Policy 1: the --url gate must refuse --baseline (a hostile target can't grandfather its own
+    findings). Rejected before any fetch, so no network."""
+    global failed
+    print("\n--- baseline: gate refuses --baseline ---")
+    r = subprocess.run([sys.executable, SCAN_PY, "--url", "owner/repo", "--baseline", "x.json"],
+                       capture_output=True, text=True)
+    if r.returncode != 0 and "do not apply to a --url gate" in (r.stdout + r.stderr):
+        print("  PASS: --url + --baseline refused before fetch")
+    else:
+        failed = True
+        print(f"  FAIL: rc={r.returncode}, out={(r.stdout + r.stderr)[:120]!r}")
 
 
 def test_gate_resolve_url():
@@ -696,6 +829,12 @@ if __name__ == "__main__":
     test_gate_safe_clone()
     test_gate_verdict()
     test_gate_format()
+    test_exclude_glob()
+    test_diff_scope()
+    test_baseline_fingerprint_stable()
+    test_baseline_roundtrip()
+    test_baseline_audit()
+    test_baseline_gate_refusal()
     test_findings_exact("quick")
     test_findings_exact("readme")
     test_false_positives("quick")
