@@ -1,15 +1,17 @@
 # Git Gud Security
 
-Security scanner for repos. 332 checks across 19 categories. Runs as a Claude Code skill or as a standalone Python script.
+A free security tool for solo AI devs: check the skills, MCP servers, agents, and apps you build before you ship them, without paying for a service. No account, no subscription. The fast scan runs entirely on your machine.
 
-Covers app security (Supabase, Firebase, Cloudflare Workers, Next.js, Flutter, Expo) and the AI tooling surface (MCP servers, Claude skills/plugins/hooks, coding-agent config files, prompt injection in instruction files). Finds secrets, auth gaps, injection sinks, business logic holes, supply chain risks, CI/CD misconfig.
+Most of what burns people isn't exotic: a service_role key pasted into the frontend, RLS left off "for dev," a committed `.env` with live keys, an MCP tool that runs `exec()` on model-supplied input, a SKILL.md trying to redirect your agent. It looks for those and reports them plainly, with the file and line.
+
+Built for the AI tooling surface the free scanners ignore (MCP servers, Claude skills/plugins/hooks, coding-agent config files, prompt injection in instruction files), with coverage of the app behind it too (Supabase, Firebase, Cloudflare Workers, Next.js, Flutter, Expo). Runs as a Claude Code skill or as a standalone Python script with no dependencies.
 
 ## Install
 
 Clone into your skills directory. Pin to a release tag (recommended for a security tool, so you know exactly what's running):
 
 ```bash
-git clone --branch v0.2.0 https://github.com/kidsmeal/git-gud-security ~/.claude/skills/git-gud-security
+git clone --branch v0.3.0 https://github.com/kidsmeal/git-gud-security ~/.claude/skills/git-gud-security
 ```
 
 Or track the latest:
@@ -30,22 +32,24 @@ is this safe to ship?
 
 ## Modes
 
-| Mode | What it reads | What it catches |
-|---|---|---|
-| `readme` | README, docs, visible manifests | holes betrayed by claims and red-flag phrases |
-| `quick` | readme + deterministic pattern/secret/config sweep | exposed secrets, dangerous code patterns, misconfig |
-| `full` | quick + code reading and dataflow tracing | injection/SSRF reachability, IDOR, missing authz, deps, CI/CD |
-| `ultra` | full as an adversarial multi-agent workflow | everything, each finding survives independent refutation before reporting |
+Start free and instant, go deeper only if you want to. The first two modes run locally with nothing but Python. The deeper two read your code with an LLM, so they cost tokens in your own Claude Code.
 
-Default is `quick`. Each mode is a strict superset of the one below it.
+| Mode | What it reads | What it looks for | Cost |
+|---|---|---|---|
+| `readme` | README, docs, visible manifests | holes betrayed by claims and red-flag phrases | free, local |
+| `quick` | readme + deterministic pattern/secret/config sweep | exposed secrets, dangerous code patterns, misconfig | free, local |
+| `full` | quick + code reading and dataflow tracing | injection/SSRF reachable from user input, IDOR, missing authz, deps, CI/CD | your Claude Code tokens |
+| `ultra` | full as an adversarial multi-agent workflow | the same, each finding refuted before it's reported | many tokens (see below) |
+
+Default is `quick`. Each mode is a strict superset of the one below it. `readme` and `quick` need only Python; `full` and `ultra` need Claude Code because they use the model to read code.
 
 `readme` is the cheapest pass. It catches more than you'd expect because a lot of projects advertise their own holes in their docs ("just paste your service key here", "RLS disabled for easy local dev"). Findings are marked as inferred, not confirmed, unless the README literally shows the vulnerable thing.
 
-`quick` runs a deterministic pattern sweep on top of the readme pass. It greps for secret formats, known-dangerous code patterns, and config red flags using `scripts/patterns.json` (80 patterns). Every hit is confirmed at the source line before reporting. Fast, low false-positive rate, catches the things that actually burn people.
+`quick` runs a deterministic pattern sweep on top of the readme pass. It greps for secret formats, known-dangerous code patterns, and config red flags using `scripts/patterns.json` (80 patterns). Every hit is confirmed at the source line before reporting. Fast, low false-positive rate, catches the things that actually burn people. This is the everyday mode, and it's free.
 
-`full` reads the code and traces dataflow. This is where injection sinks, SSRF, IDOR, broken multi-tenant isolation, and missing per-object authorization checks get caught. It also audits RLS policies, CI/CD workflows, and dependency hygiene. Slower, but it finds the holes that pattern matching can't reach.
+`full` reads the code and traces dataflow. This is where it looks for injection sinks, SSRF, IDOR, broken multi-tenant isolation, and missing per-object authorization checks. It also audits RLS policies, CI/CD workflows, and dependency hygiene. It reaches holes pattern matching can't, but it reads your code with an LLM, so what it finds depends on the model and it costs tokens in your own Claude Code.
 
-`ultra` runs the full scan as an adversarial multi-agent workflow. Every finding goes to independent skeptics prompted to refute it. A finding only survives if the majority confirm it's real and reachable. This keeps the false-positive rate near zero at the cost of more tokens.
+`ultra` runs the full scan as an adversarial multi-agent workflow. Every finding goes to independent skeptics prompted to refute it, and only survives if the majority confirm it's real and reachable. That verification pass makes ultra's findings the most trustworthy and makes it by far the most expensive mode: it fans out many agents per category and loops until two rounds turn up nothing new, so a single ultra run can be hundreds of model calls. Reach for it when a miss is costly (a public launch, or shipping a tool other people will install), not for a routine check. For everyday scans, `quick` is free and `full` is enough.
 
 `full` and `ultra` treat the scanned repo as untrusted. They won't honor its hooks, `.claude`/`.cursor` settings, or `.mcp.json`. Those files are findings to report, not config to load.
 
@@ -78,7 +82,7 @@ Scan staged files on every commit and block on high+ findings. Needs the [pre-co
 ```yaml
 repos:
   - repo: https://github.com/kidsmeal/git-gud-security
-    rev: v0.2.0
+    rev: v0.3.0
     hooks:
       - id: git-gud-security        # blocks the commit on high+ findings
       # - id: git-gud-security-warn # or: print findings without blocking
@@ -102,7 +106,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: kidsmeal/git-gud-security@v0.2.0
+      - uses: kidsmeal/git-gud-security@v0.3.0
         # with:
         #   mode: quick            # or readme
         #   exclude: tests vendor  # dirs to skip
@@ -120,9 +124,55 @@ python scripts/scan.py . --mode quick --format sarif --out ggs.sarif
 
 SARIF is split into one **run per engine** — `deterministic` (this script) and `llm` (the skill's dataflow/adversarial findings) — each with its own `automationDetails.id`, so GitHub renders them as separate analyses and you can gate CI on each independently (hard-fail deterministic, warn on single-pass llm). Every finding also carries an `engine` field in the JSON output. The standalone script only produces deterministic findings, so on its own it emits a single run.
 
+## Install gate (vet a URL before you install it)
+
+Every mode above scans a repo you already trust enough to check out. The gate is the opposite
+motion: it scans an **untrusted** skill, MCP server, or plugin **from a URL, before it touches
+your machine**. This is the audience this tool is built for, people installing agent tooling, and
+the surface no generic scanner covers.
+
+Through the skill, conversationally:
+
+```
+git gud, is this skill safe to install?  https://github.com/someone/their-skill
+git gud gate someone/their-mcp-server
+is it safe to add this MCP server? <url>
+```
+
+Or standalone:
+
+```bash
+python scripts/scan.py --url someone/their-skill            # owner/repo or a full https URL
+python scripts/scan.py --url https://github.com/x/y --ref v1.2.0
+```
+
+It shallow-clones the target into an isolated temp dir (never `~/.claude`, never your cwd),
+classifies it, scans it, and prints a verdict. The target is **never executed** (static read
+only), and the fetch is hardened against a repo built to attack the scanner: a git protocol
+allowlist (https/git only, no `ext::` command-exec or `file://` local-read), an isolated HOME, no
+submodule recursion, a size cap, and a timeout.
+
+```
+Git Gud Security — install gate · their-skill @ 9f3c1a2b
+
+  Verdict: DO NOT INSTALL   install-time: 1 critical · 0 high   ·   all: 1 critical · 1 high · 0 medium · 0 low
+  Artifact: skill
+
+INSTALL-TIME RISKS  (fire the moment you load this)
+  1. CRITICAL hook-exfiltrates-env-or-credentials      hooks/session-start.sh:4
+     fix: A hook that reads env/SSH/.aws and POSTs to a remote is exfiltration. Remove it and rotate.
+...
+```
+
+Three verdicts: **DO NOT INSTALL** (a critical/high that fires at install/load time), **REVIEW
+FIRST** (real findings, none that fire on load), **LOOKS CLEAN** (within the mode's reach).
+Install-time risks (hooks, MCP/tool defs, config-that-runs-on-open, install scripts,
+instruction-file injection) are surfaced above ordinary app-sec findings. The verdict is the
+deterministic quick tier; ask for full or ultra to trace reachability before trusting a LOOKS CLEAN.
+
 ## Check library
 
-[`references/checks.md`](references/checks.md) has the full library. [`references/readme-redflags.md`](references/readme-redflags.md) is the fast lookup for readme mode.
+[`references/checks.md`](references/checks.md) has the full library: 332 checks across 19 categories. Of those, 80 are wired into the standalone scanner as deterministic patterns; the rest are reasoned about by the LLM in `full`/`ultra`. [`references/readme-redflags.md`](references/readme-redflags.md) is the fast lookup for readme mode.
 
 To add or change checks, edit `scripts/checks.data.json` and rebuild:
 
@@ -131,10 +181,6 @@ python scripts/build_checks.py
 ```
 
 `scripts/patterns.json` is the scanner's pattern set (grep/config subset, linked by id). `references/ultra-workflow.md` is the adversarial workflow for ultra mode.
-
-## Direction
-
-Where this is headed — own the AI/agent supply-chain surface, keep the standalone core light: [ROADMAP.md](ROADMAP.md).
 
 ## Limitations
 

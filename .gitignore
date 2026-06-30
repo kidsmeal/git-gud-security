@@ -23,3 +23,7 @@ Thumbs.db
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Internal direction/planning — kept local, not a public artifact
+ROADMAP.md
+INSTALL_GATE.md

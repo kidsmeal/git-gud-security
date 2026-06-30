@@ -1,6 +1,9 @@
 # Spec: pre-install supply-chain gate (0.3.0)
 
-Status: proposed. This is the design for the 0.3.0 headline feature. Nothing here is built yet.
+Status: **shipped in 0.3.0.** This was the design; the gate is now built (`scan.py --url`,
+`--format gate`, `--keep`, and the SKILL.md gate flow). The flow and safety model below describe
+what shipped. The "Open questions" at the end are the 0.3.x follow-ons that were deferred
+(already-installed sweep, SHA cache, non-GitHub hosts).
 
 ## The problem
 

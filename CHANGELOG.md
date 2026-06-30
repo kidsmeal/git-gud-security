@@ -4,6 +4,45 @@ All notable changes to Git Gud Security are recorded here. Versioning is
 [SemVer](https://semver.org/). Pre-1.0: behavior and check IDs may still change between
 minor versions.
 
+## [0.3.0] - 2026-06-30
+
+The pre-install gate: vet an untrusted skill / MCP server / plugin from a URL **before** it
+touches your machine. Every prior mode assumed you already trusted the code enough to check it
+out. The gate inverts that and scans agent code, from a URL, before install. No new checks; the
+library is unchanged at 332. JSON is still the default for a local scan, so the skill and the
+pre-commit/Action paths are unaffected.
+
+### Added
+
+- **`scan.py --url <url|owner/repo>`.** Fetches an untrusted target into an isolated temp dir
+  (never `~/.claude`, never the cwd), classifies it (skill / plugin / MCP / agent-config / app),
+  scans it, and prints a go/no-go verdict. The target is **never executed** — static read only.
+  `--ref` pins a branch/tag; the verdict names the exact commit SHA vetted.
+- **Hardened fetch.** The repo is written by someone trying to attack the scanner, so the clone
+  uses a git protocol allowlist (https/git only — no `ext::` command-exec, no `file://` local
+  read), an isolated HOME with system/global git config off, no submodule recursion, no
+  clone-time template hooks, a wall-clock timeout, and a post-clone size ceiling. Temp clones are
+  always cleaned up (Windows read-only git objects included).
+- **`--format gate`.** A three-level verdict — **DO NOT INSTALL** (a critical/high that fires at
+  install/load time), **REVIEW FIRST** (real findings, none that fire on load), **LOOKS CLEAN**
+  (within the mode's reach) — with install-time risks surfaced above ordinary app-sec findings,
+  and a footer naming what was checked and that the code was not run. The default format for
+  `--url`. The blocking surface is data-driven: an `install_time_categories` set in
+  `patterns.json` (`claude-ext`, `mcp`, `ai-config-trust`, `supply-chain`), and every finding now
+  carries an `install_time` flag in JSON.
+- **`--keep`.** With `--url`, leaves the hardened checkout in place and prints its path so the
+  skill's `full`/`ultra` tiers can read it under the hostile-repo posture instead of re-cloning
+  unsafely.
+- **Skill gate flow.** SKILL.md routes a URL + install intent ("is this skill safe to install?",
+  "git gud gate `<url>`") to the gate, leads with the verdict, and writes `INSTALL_GATE.md`.
+
+### Tests
+
+- Gate oracle in `run_tests.py`: URL resolution + protocol refusal (ext/file/ssh/scp/bare-path),
+  artifact classification, the hardened clone (pinned SHA, size cap, no stranded temp dir, ext::
+  refused by the clone itself), the three verdict thresholds, and `--format gate` end to end
+  against a malicious-skill and a clean-skill fixture.
+
 ## [0.2.0] - 2026-06-30
 
 Adds the workflow integrations the deterministic tier was missing: a pre-commit hook, SARIF
@@ -38,7 +77,6 @@ unaffected.
   default (findings are candidates); `fail-on:` blocks. Inputs passed via `env`, never
   interpolated into the run script, to avoid the Actions expression-injection hole this tool
   itself flags.
-- **`ROADMAP.md`** — direction and the deterministic-vs-LLM architectural line.
 - **`docs/pre-install-gate.md`** — spec for the 0.3.0 headline: vetting a third-party skill /
   MCP / plugin from a URL before it's installed.
 
