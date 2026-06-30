@@ -12,7 +12,7 @@ A free security tool for solo AI devs: check the skills, MCP servers, agents, an
 
 Most of what burns people isn't exotic: a service_role key pasted into the frontend, RLS left off "for dev," a committed `.env` with live keys, an MCP tool that runs `exec()` on model-supplied input, a SKILL.md trying to redirect your agent. It looks for those and reports them plainly, with the file and line.
 
-Built for the AI tooling surface the free scanners ignore (MCP servers, Claude skills/plugins/hooks, coding-agent config files, prompt injection in instruction files), with coverage of the app behind it too (Supabase, Firebase, Cloudflare Workers, Next.js, Flutter, Expo). Runs as a Claude Code skill or as a standalone Python script with no dependencies.
+Built for the AI tooling surface the free scanners ignore (MCP servers, Claude skills/plugins/hooks, coding-agent config files, prompt injection in instruction files), with coverage of the app behind it too (Supabase, Firebase, Cloudflare Workers, Next.js, Flutter, Expo). Runs as a Claude Code skill, or as a zero-dependency Python script for the fast `readme`/`quick` scan (`full` and `ultra` need Claude Code for the LLM).
 
 ## Install
 
