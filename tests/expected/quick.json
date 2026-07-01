@@ -660,6 +660,12 @@
     "critical"
   ],
   [
+    "secret-in-readme-or-docs",
+    "leaky-readme.md",
+    5,
+    "high"
+  ],
+  [
     "secret-modern-key-prefix-sweep",
     "secrets.ts",
     29,

@@ -4,6 +4,30 @@ All notable changes to Git Gud Security are recorded here. Versioning is
 [SemVer](https://semver.org/). Pre-1.0: behavior and check IDs may still change between
 minor versions.
 
+## [0.5.0] - 2026-06-30
+
+Docs-secret coverage. Closes a real gap: the check library lists a live credential pasted into a
+README or docs as a finding (`secret-in-readme-or-docs`), but no deterministic pattern implemented
+it. Secret patterns excluded `.md`/`.txt` to avoid drowning in the placeholder keys docs are full
+of, so a *real* pasted `ghp_`/`sk-ant-`/`AKIA` key slipped through the fast scan.
+
+### Added
+
+- **`secret-in-readme-or-docs` (81st pattern).** Scans `.md`/`.mdx`/`.txt` for provider-prefixed
+  key formats (GitHub, OpenAI, Anthropic, AWS, Google, Slack, Stripe, and the AI/infra prefixes).
+  81 patterns now, up from 80. The check library is unchanged at 332 (this implements a check that
+  already existed).
+- **Live-vs-placeholder entropy gate.** The doc tier only fires when the matched *token* reads as a
+  live key: it's dropped on a placeholder marker (`xxx`, `your`, `example`, …), low Shannon entropy
+  (`ghp_AAAA…`), a long single-char run, or a sequential run (`ghp_abcdef…`). Crucially it gates on
+  the token, not the surrounding line, so a real key sitting next to a "replace with your key"
+  comment still fires. Tuned to favor a rare miss over a false positive.
+
+### Tests
+
+- A true-positive fixture (a live-looking token in a `.md`) and a false-positive fixture (a page of
+  placeholder keys) that must stay silent, plus the regenerated `quick` golden.
+
 ## [0.4.1] - 2026-06-30
 
 Bug fix and CI hygiene.

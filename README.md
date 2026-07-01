@@ -19,7 +19,7 @@ Built for the AI tooling surface the free scanners ignore (MCP servers, Claude s
 Clone into your skills directory. Pin to a release tag (recommended for a security tool, so you know exactly what's running):
 
 ```bash
-git clone --branch v0.4.1 https://github.com/kidsmeal/git-gud-security ~/.claude/skills/git-gud-security
+git clone --branch v0.5.0 https://github.com/kidsmeal/git-gud-security ~/.claude/skills/git-gud-security
 ```
 
 Or track the latest:
@@ -53,7 +53,7 @@ Default is `quick`. Each mode is a strict superset of the one below it. `readme`
 
 `readme` is the cheapest pass. It catches more than you'd expect because a lot of projects advertise their own holes in their docs ("just paste your service key here", "RLS disabled for easy local dev"). Findings are marked as inferred, not confirmed, unless the README literally shows the vulnerable thing.
 
-`quick` runs a deterministic pattern sweep on top of the readme pass. It greps for secret formats, known-dangerous code patterns, and config red flags using `scripts/patterns.json` (80 patterns). Every hit is confirmed at the source line before reporting. Fast, low false-positive rate, catches the things that actually burn people. This is the everyday mode, and it's free.
+`quick` runs a deterministic pattern sweep on top of the readme pass. It greps for secret formats, known-dangerous code patterns, and config red flags using `scripts/patterns.json` (81 patterns). Every hit is confirmed at the source line before reporting. Fast, low false-positive rate, catches the things that actually burn people. This is the everyday mode, and it's free.
 
 `full` reads the code and traces dataflow. This is where it looks for injection sinks, SSRF, IDOR, broken multi-tenant isolation, and missing per-object authorization checks. It also audits RLS policies, CI/CD workflows, and dependency hygiene. It reaches holes pattern matching can't, but it reads your code with an LLM, so what it finds depends on the model and it costs tokens in your own Claude Code.
 
@@ -109,7 +109,7 @@ Scan staged files on every commit and block on high+ findings. Needs the [pre-co
 ```yaml
 repos:
   - repo: https://github.com/kidsmeal/git-gud-security
-    rev: v0.4.1
+    rev: v0.5.0
     hooks:
       - id: git-gud-security        # blocks the commit on high+ findings
       # - id: git-gud-security-warn # or: print findings without blocking
@@ -133,7 +133,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: kidsmeal/git-gud-security@v0.4.1
+      - uses: kidsmeal/git-gud-security@v0.5.0
         # with:
         #   mode: quick            # or readme
         #   exclude: tests vendor  # dirs to skip

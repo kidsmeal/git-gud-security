@@ -30,15 +30,17 @@ Grep if Python is unavailable.
 import argparse
 import fnmatch
 import json
+import math
 import os
 import re
 import subprocess
 import sys
+from collections import Counter
 
 import baseline
 import gate
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -262,6 +264,56 @@ def path_excluded(rel_path):
     return False
 
 
+# Live-secret gate for the docs tier. Docs are full of placeholder/example keys (ghp_AAAA…,
+# sk-ant-xxxx, <your-token>), so a doc-secret pattern only fires when the matched TOKEN itself
+# reads as a live credential. Evaluating the token (not the line) means a real key sitting next
+# to a "replace with your key" comment still fires, which is exactly the case the check warns about.
+SECRET_ENTROPY_MIN = 3.0  # bits/char; a real random token scores ~4.5+, AAAA…/xxxx score near 0
+_PLACEHOLDER_MARKERS = ("xxx", "your", "example", "placeholder", "redact", "dummy", "changeme",
+                        "sample", "notreal", "replaceme", "faketoken", "todo", "realtokenhere")
+
+
+def shannon_entropy(s):
+    if not s:
+        return 0.0
+    n = len(s)
+    return -sum((c / n) * math.log2(c / n) for c in Counter(s).values())
+
+
+def _has_repeat_run(s, n):
+    """n+ of the same character in a row (AAAAAA, 000000)."""
+    run = 1
+    for a, b in zip(s, s[1:]):
+        run = run + 1 if a == b else 1
+        if run >= n:
+            return True
+    return False
+
+
+def _has_sequential_run(s, n):
+    """n+ consecutive ascending or descending code points (012345, abcdef, fedcba)."""
+    up = down = 1
+    for a, b in zip(s, s[1:]):
+        d = ord(b) - ord(a)
+        up = up + 1 if d == 1 else 1
+        down = down + 1 if d == -1 else 1
+        if up >= n or down >= n:
+            return True
+    return False
+
+
+def looks_placeholder(token):
+    """True if a matched secret token reads as a doc placeholder/example rather than a live key.
+    Belt-and-suspenders: a named marker, low entropy, a long single-char run, or a sequential run
+    each disqualify it. Tuned to drop fakes, not real keys (a false negative beats crying wolf)."""
+    low = token.lower()
+    if any(m in low for m in _PLACEHOLDER_MARKERS):
+        return True
+    if shannon_entropy(token) < SECRET_ENTROPY_MIN:
+        return True
+    return _has_repeat_run(token, 6) or _has_sequential_run(token, 6)
+
+
 def match_in_line(line, pat):
     """First `_any` hit not suppressed by a `_not` in the same window. Long lines are scanned
     in overlapping windows so a hit past MAX_LINE_LEN (a key in a one-line minified bundle) is
@@ -307,6 +359,11 @@ def scan_content(root, patterns, do_redact, files=None):
             for i, line in enumerate(lines, 1):
                 hit, win = match_in_line(line, pat)
                 if not hit:
+                    continue
+                # Docs tier: only keep the hit if the matched token reads as a live key, not a
+                # placeholder/example. Gates on the token itself, so a real key next to a
+                # "replace with your key" note still fires.
+                if pat.get("entropy_gate") and looks_placeholder(hit.group(0)):
                     continue
                 if len(line) <= MAX_LINE_LEN:
                     snippet = line.rstrip()[:200]

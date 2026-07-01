@@ -1168,6 +1168,37 @@
       "fix": "Rotate and move to a server-only secret store. sb_secret_ is service_role-equivalent and bypasses RLS; it must never reach the client."
     },
     {
+      "id": "secret-in-readme-or-docs",
+      "category": "secrets",
+      "severity": "high",
+      "title": "Live credential pasted into README/docs",
+      "detectability": "grep",
+      "secret": true,
+      "entropy_gate": true,
+      "include": [".md", ".mdx", ".txt"],
+      "any": [
+        "gh[pousr]_[A-Za-z0-9]{36}",
+        "github_pat_[A-Za-z0-9_]{59,}",
+        "sk-ant-[A-Za-z0-9-]{40,}",
+        "sk-proj-[A-Za-z0-9_-]{40,}",
+        "sk-[A-Za-z0-9]{48}",
+        "sk_live_[A-Za-z0-9]{24,}",
+        "rk_live_[A-Za-z0-9]{24,}",
+        "AKIA[0-9A-Z]{16}",
+        "AIza[0-9A-Za-z_-]{35}",
+        "xox[baprs]-[A-Za-z0-9-]{20,}",
+        "sb_secret_[A-Za-z0-9_-]{20,}",
+        "gsk_[A-Za-z0-9]{40,}",
+        "hf_[A-Za-z0-9]{34,}",
+        "r8_[A-Za-z0-9]{36,}",
+        "xai-[A-Za-z0-9]{40,}",
+        "pplx-[A-Za-z0-9]{40,}",
+        "npm_[A-Za-z0-9]{36}"
+      ],
+      "not": [],
+      "fix": "Assume the key is compromised the moment it's committed: rotate it now, replace the doc value with an obvious placeholder, and scan docs in CI. The entropy gate already drops placeholders, so a hit here is a live-looking key."
+    },
+    {
       "id": "secrets-in-newer-deploy-config-files",
       "category": "secrets",
       "severity": "high",

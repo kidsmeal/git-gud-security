@@ -4,7 +4,7 @@
 #
 #   repos:
 #     - repo: https://github.com/kidsmeal/git-gud-security
-#       rev: v0.4.1
+#       rev: v0.5.0
 #       hooks:
 #         - id: git-gud-security          # quick scan of staged files, blocks on high+
 #
