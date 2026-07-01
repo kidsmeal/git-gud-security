@@ -1,4 +1,4 @@
-# Ultra mode — adversarial multi-agent scan
+# Ultra mode: adversarial multi-agent scan
 
 Ultra mode runs the scan as a `Workflow` so every finding is **refuted before it's reported**.
 This is what keeps the false-positive rate near zero on a deep scan: a single LLM pass invents
@@ -35,7 +35,7 @@ path, `categories` is the selection you make **before** launching. Read
 `references/ultra-categories.json` (generated from the check library), keep the always-on set
 (secrets, authn-authz, injection, cicd, plus the AI/agent categories when the repo shows agent
 signals) and add the signal-gated categories whose `appliesTo` matches the repo type. Each entry
-carries its `finderDigest` — the trace/adversarial checks that category's finder should hunt. Drop
+carries its `finderDigest`, the trace/adversarial checks that category's finder should hunt. Drop
 any entry with an empty `finderDigest`; it's covered by the deterministic scan, no finder needed.
 
 ```javascript
@@ -50,16 +50,16 @@ export const meta = {
   ],
 }
 
-// No Node/process in the Workflow runtime — everything comes from `args`, which the launching
+// No Node/process in the Workflow runtime - everything comes from `args`, which the launching
 // agent populates (repo path + the category selection with finderDigests).
 if (!args || !args.repo) throw new Error('ultra: args.repo (absolute repo path) is required')
 const REPO = args.repo
 const CATEGORIES = (args.categories || []).filter(c => c.finderDigest && c.finderDigest.length)
-if (!CATEGORIES.length) throw new Error('ultra: args.categories needs ≥1 entry with a finderDigest')
+if (!CATEGORIES.length) throw new Error('ultra: args.categories needs >=1 entry with a finderDigest')
 
 // Turn a category's finderDigest into the hunt list the finder prompt carries.
 const digestText = c => c.finderDigest
-  .map(x => `- [${x.severity}] ${x.title} (${x.id}); signals: ${(x.signals || []).join(' · ')}`)
+  .map(x => `- [${x.severity}] ${x.title} (${x.id}); signals: ${(x.signals || []).join(' | ')}`)
   .join('\n')
 
 const FINDING = {
