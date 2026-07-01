@@ -3,8 +3,8 @@
 <p align="center"><em>Simple security for solo devs building with AI. Protect yourself and protect others.</em></p>
 
 <p align="center">
-  <a href="https://github.com/kidsmeal/git-gud-security/releases"><img src="https://img.shields.io/github/v/release/kidsmeal/git-gud-security" alt="Release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/kidsmeal/git-gud-security" alt="License: MIT"></a>
+  <a href="https://github.com/kidsmeal/git-gud-security/releases"><img src="https://img.shields.io/badge/release-v0.5.0-orange" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-blue" alt="Python 3.8+">
 </p>
 
