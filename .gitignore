@@ -27,3 +27,9 @@ Thumbs.db
 # Internal direction/planning — kept local, not a public artifact
 ROADMAP.md
 INSTALL_GATE.md
+.gantry/active-phase.json
+.gantry/models.json
+.gantry/headless-implementer-settings.json
+
+# ClauDHD local session state
+.now/
