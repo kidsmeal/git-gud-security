@@ -30,10 +30,13 @@ told to confirm those fast and spend its scrutiny on the reachability claims.
 
 ## Script
 
-Run this with the `Workflow` tool. Set `REPO` to the absolute repo path first (pass it via
-`args`, or inline it). Read `references/checks.md` before launching so the finder prompts carry
-the category's checks. Adapt the `CATEGORIES` list to the categories actually present in
-checks.md.
+Run this with the `Workflow` tool. Pass `args = { repo, categories }`: `repo` is the absolute repo
+path, `categories` is the selection you make **before** launching. Read
+`references/ultra-categories.json` (generated from the check library), keep the always-on set
+(secrets, authn-authz, injection, cicd, plus the AI/agent categories when the repo shows agent
+signals) and add the signal-gated categories whose `appliesTo` matches the repo type. Each entry
+carries its `finderDigest` — the trace/adversarial checks that category's finder should hunt. Drop
+any entry with an empty `finderDigest`; it's covered by the deterministic scan, no finder needed.
 
 ```javascript
 export const meta = {
@@ -47,7 +50,17 @@ export const meta = {
   ],
 }
 
-const REPO = args && args.repo ? args.repo : process_repo_path_here
+// No Node/process in the Workflow runtime — everything comes from `args`, which the launching
+// agent populates (repo path + the category selection with finderDigests).
+if (!args || !args.repo) throw new Error('ultra: args.repo (absolute repo path) is required')
+const REPO = args.repo
+const CATEGORIES = (args.categories || []).filter(c => c.finderDigest && c.finderDigest.length)
+if (!CATEGORIES.length) throw new Error('ultra: args.categories needs ≥1 entry with a finderDigest')
+
+// Turn a category's finderDigest into the hunt list the finder prompt carries.
+const digestText = c => c.finderDigest
+  .map(x => `- [${x.severity}] ${x.title} (${x.id}); signals: ${(x.signals || []).join(' · ')}`)
+  .join('\n')
 
 const FINDING = {
   type: 'object', additionalProperties: false,
@@ -68,14 +81,6 @@ const VERDICT = { type: 'object', additionalProperties: false, required: ['real'
 const GAPS = { type: 'object', additionalProperties: false, required: ['gaps'],
   properties: { gaps: { type: 'array', items: { type: 'string' } } } }
 
-// One entry per category in checks.md. The checksDigest is the bullet list of that
-// category's checks (paste from checks.md) so the finder knows exactly what to hunt.
-const CATEGORIES = [
-  { key: 'secrets', checksDigest: '...paste secrets-and-credentials checks...' },
-  { key: 'authz',   checksDigest: '...paste authn-authz checks...' },
-  // ...one per category...
-]
-
 const seen = new Set()
 const key = f => `${f.file}:${f.line}:${f.id}`
 const confirmed = []
@@ -86,7 +91,7 @@ while (dry < 2 && round < 4) {
   phase('Find')
   const found = (await parallel(CATEGORIES.map(c => () =>
     agent(
-      `Security-audit the repo at ${REPO}. Hunt ONLY for this category's holes:\n${c.checksDigest}\n\n` +
+      `Security-audit the repo at ${REPO}. Hunt ONLY for this category's holes:\n${digestText(c)}\n\n` +
       `Use Grep/Read/Bash to find real instances. For each, give file:line, the exact evidence line, ` +
       `and a concrete exploit (who does what). Skip anything in tests/, docs/, *.example, or that is a ` +
       `placeholder. Round ${round}: do not re-report things already found at these locations: ` +
