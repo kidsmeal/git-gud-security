@@ -169,13 +169,68 @@ schema so the SARIF `llm` run the roadmap promised becomes real. Write report + 
 
 ## Build order
 
-1. **Make it execute** — fix `REPO` resolution; generate `CATEGORIES`/digests from
-   `checks.data.json`. (No behavior polish yet.)
-2. **Run once on a known-vulnerable fixture** and watch it. Diagnose from behavior.
-3. **Corrections** — critic `focusQueue`, safety rules, seed-from-scan.
-4. **Deepenings** — trimmed schemas, perspective-diverse verify, `engine: llm` emission;
-   `references/full-audit.md` + SKILL.md thin edits.
-5. **Record the run** in `RUNTIME_VERIFICATION_QUEUE.md`. Then it's allowed to be called improved.
+1. [x] **Make it execute** — `REPO` resolution fixed; `CATEGORIES`/digests generated from
+   `checks.data.json` into `references/ultra-categories.json`.
+2. [x] **Run once on the fixture** and diagnose. See Run 1 diagnosis above.
+3. [x] **Corrections** — critic `focusQueue` (gaps now drive the next round; later rounds are
+   targeted, not blind re-fan-out), safety preamble (trusted vs `hostile` no-shell mode) in every
+   finder/verifier prompt, seed-from-scan Preflight (`args.scanFindings`).
+4. [x] **Deepenings** — richer `FINDING`/`VERDICT` schemas, perspective-diverse verify
+   (correctness / reachability / false-positive), dedup by file+line proximity, `engine` stamp
+   (deterministic seed vs llm find); `references/full-audit.md` written + SKILL.md thin edits.
+5. [ ] **Re-run on the fixture with the corrected script** to confirm the fixes fire (focusQueue
+   sweeps gaps, SSRF de-dups to one, seed folds the secret in pre-located). Then it earns "improved."
+
+**Remaining follow-ons (not blockers):**
+- SARIF `llm` run plumbing: findings are now stamped `engine: llm`, but feeding them to
+  `scan.py`'s `_sarif_run` builder (so the `git-gud-security/llm` run actually emits) is still to wire.
+- `args` delivery: the Workflow tool's permission path dropped `args`; confirm whether inline
+  `script` preserves it, else the skill bakes the selection into a run copy (as Run 1 did).
+
+## Run 1 diagnosis (step 2)
+
+First real execution: `tests/fixtures/ultra-vuln-app`, 4 categories, 46 agents, 261k tokens,
+4 rounds. `args` didn't survive the tool's permission path, so repo + categories were baked into
+the run copy (committed `ultra-workflow.md` stays args-driven; the delivery path is a step-3 item).
+
+**What held (the core value prop):**
+- All 6 real trace-tier holes confirmed: header-trust auth, IDOR, SSRF, privesc, command
+  injection, cross-tenant isolation. Each with source/sink/attack-path reasoning.
+- The guarded `/api/orders/:id` route was correctly NOT flagged. Verifiers actively cited it as
+  the positive contrast ("developers knew how to check; the invoices route omits it"). No false
+  positive on the safe route.
+- **The adversarial gate killed a bad finding.** The secrets finder over-claimed a "real Stripe
+  key leaked in git history," reconstructing the amended-away key from the dangling commit. All
+  three skeptics refuted it (dead code, HEAD has the placeholder). The vote did its job.
+
+**What the run exposed (maps to planned corrections):**
+1. **Critic loop is dead code — confirmed live.** Round 4's critic named 5 concrete gaps (rate
+   limiting, CORS, error disclosure, paymentId validation, the hardcoded key) and the loop dropped
+   them and exited. Exactly the `focusQueue` fix. Some of those gaps are real lower-sev holes we
+   now miss.
+2. **Seed-from-scan, argued empirically.** A finder spent a Haiku agent 43 tool calls / ~580s
+   spelunking git history to "find" a grep-tier secret at HEAD:53 — then over-claimed, forcing
+   three refutations. `scan.py --json` would have handed it over pre-located in milliseconds. This
+   is the single strongest case for decision 4.
+3. **Hostile-repo safety validated.** Finders have Bash and roamed `git fsck`/reflog. Fine on a
+   trusted fixture; on a `--url` gate target that's the exact exposure the step-3 safety rules
+   close.
+
+**New findings the design didn't call out (fold into step 3/4):**
+4. **`seen`-set dedup is too weak.** SSRF was reported twice — `no-authz-on-endpoint-1` (line 23)
+   and `ssrf-user-controlled-fetch-001` (line 24), same hole, different id + off-by-one line. The
+   key is `file:line:id`, so near-duplicates both survive. 7 confirmed rows = 6 distinct holes.
+   Need dedup by proximity/root-cause in synthesis, not exact key.
+5. **Finders re-run every category every round, wastefully.** ~16 finder spawns for 4 categories;
+   rounds 3-4 found nothing new but still ran a full fan-out. The `seen` context prevents
+   re-reporting, not re-scanning.
+6. **The workflow returns raw `{confirmed, rounds}`.** No grade, no dedup, no `engine: llm` stamp,
+   no report. The "Grade" phase is a bare `return`. Synthesis (grade + dedup + SARIF emission) is
+   the step-4 post-processing that doesn't exist yet.
+
+Net: the core (find real, refute fake, spare the guarded route) works. Every defect the redesign
+already targets fired on cue, plus two new ones (weak dedup, wasteful re-runs). Nothing here
+changes the locked decisions; it sharpens step 3/4.
 
 ## Out of scope (hold the line)
 - No porting trace logic into `scan.py`. Semantic work stays in the model.

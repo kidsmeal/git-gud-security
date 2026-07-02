@@ -96,37 +96,41 @@ Use for "scan my repo," "is this safe to ship," a fast pre-push check.
 ### full mode
 
 Use for "thorough audit," "deep scan," before a public launch, or when quick mode found enough
-smoke to suspect fire.
+smoke to suspect fire. Full mode is a single Claude run doing a real dataflow audit, following a
+fixed sequence so different runs produce consistent reviews.
 
-1. Everything quick mode does.
-2. Then read the code and trace dataflow for the `trace`-tier checks in `references/checks.md`:
-   - **Injection/SSRF/path-traversal:** find every sink (`exec`, `query`, `fetch(url)`,
-     `open(path)`, deserializers) and trace backward — is the input user-controlled and
-     unvalidated? A sink with only constant input is not a finding.
-   - **Auth & access control:** for each route/endpoint/handler, is there an authorization check,
-     and does it check the *right* thing (this user owns this object), not just "is logged in"?
-     This is where IDOR and broken multi-tenant isolation live.
-   - **BaaS:** read the actual RLS policies / firebase rules / bucket configs, not just whether
-     they exist. A policy of `using (true)` is the same as no policy.
-   - **Deps & CI/CD:** lockfile present, no `curl | bash` installers, GitHub Actions don't
-     interpolate untrusted event fields into `run:`, tokens aren't write-all.
-3. Confidence-score every finding (see below) and cite `file:line`. Report ≥ threshold only.
+**Follow `references/full-audit.md`.** It is the operator manual: repo map first, run quick and
+seed from it, build the attack-surface tables, apply the trace contract (a trace finding needs
+source + sink + missing guard + attack path or it is dropped), work the authz matrix (the part no
+pattern scanner catches), apply the "not a finding" drop rules, and the `--url` install-gate
+variant. Load `references/checks.md` for the relevant categories before you start; confidence-score
+every finding and cite `file:line`, reporting at or above threshold only.
 
 ### ultra mode
 
-Use when the user says "ultra," "adversarial," "be exhaustive," "leave nothing," or is shipping
-something where a miss is expensive. This runs the scan as a `Workflow` so findings are verified
-before they reach the user. Read `references/ultra-workflow.md` for the script to run; the shape:
+Ultra is **full mode plus adversarial validation**, not just "more agents." It runs as a
+`Workflow` so the cheap deterministic hits seed the run and every model finding is refuted from
+independent angles before it reaches the user.
 
-- **Find:** fan out parallel finders, one per category in `references/checks.md`, each returning
-  structured findings with `file:line`.
-- **Verify:** every finding goes to independent skeptics prompted to *refute* it (default to
-  "false positive" unless they can prove the hole is real and reachable). A finding survives only
-  on majority-confirm. This is the adversarial gate — it's what keeps ultra's false-positive rate
-  near zero.
-- **Critique & loop:** a completeness critic asks "what category or attack surface did we not
-  look at," and the loop runs another round until two consecutive rounds surface nothing new.
-- **Synthesize:** dedup, grade, write the report.
+**When to use:** a public launch, a third-party install gate, a security-sensitive product, or
+when quick/full already found critical smoke and a miss is expensive.
+
+**When not to:** a routine pre-commit check, a repo with no real app/security surface, or when the
+user explicitly wants a cheap scan. It costs real tokens (a first run on a trivial app was ~260k).
+
+**What it guarantees:** a lower false-positive rate (the adversarial vote) and broader category
+coverage (the critic loop). **What it does not:** no runtime exploit proof, no dependency
+intelligence like Snyk/Semgrep, and no promise that a clean scan is safe - only that nothing was
+found within this run's reach.
+
+**Run it:** read `references/ultra-workflow.md` for the full script and contracts. Before
+launching, run `python scripts/scan.py <repo> --mode quick --json` and pass the findings in as the
+deterministic seed, and select categories from `references/ultra-categories.json`. The shape:
+Preflight (seed) -> Find (per category, then targeted at critic gaps) -> Verify (three diverse-lens
+skeptics, majority-real survives) -> Critique (gaps drive the next round) -> Grade (dedup, stamp
+`engine`, grade). The workflow returns structured findings stamped `engine: llm` (vs `deterministic`
+for seeds); render the report and `SECURITY_AUDIT.md` from them - and, when SARIF is requested, the
+`engine: llm` run the roadmap describes.
 
 ## Pre-install gate (a URL, before you install it)
 
@@ -275,7 +279,14 @@ target repo's config precedence.
   start of any quick/full/ultra scan** — it is the source of truth for what to look for.
 - `references/readme-redflags.md` — the phrase-to-hole lookup for `readme` mode. Generated. Load
   this instead of the full `checks.md` for a README-only pass; it's the fast path.
-- `references/ultra-workflow.md` — the adversarial multi-agent `Workflow` script for ultra mode.
+- `references/full-audit.md` — the full-mode operator manual: the fixed audit sequence (repo map,
+  seed from quick, attack-surface tables, trace contract, authz matrix, drop rules, gate variant).
+  **Read this at the start of any full/ultra scan.**
+- `references/ultra-workflow.md` — the adversarial multi-agent `Workflow` script + contracts for
+  ultra mode (Preflight seed, diverse-lens verify, critic focusQueue, dedup + grade).
+- `references/ultra-categories.json` — generated category list the ultra launcher selects from
+  (per category: `appliesTo` for repo-type gating + the trace/adversarial `finderDigest`). Built by
+  `build_checks.py`; do not hand-edit.
 - `scripts/scan.py` — the deterministic sweep (secrets + patterns + config). Emits JSON by
   default; `--format sarif` for GitHub code scanning, `--format text` for a terse summary.
   `--staged` scans only staged files and `--fail-on <severity>` exits nonzero to block —

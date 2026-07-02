@@ -19,11 +19,18 @@ passes (141 quick + 42 readme fixtures exact).
       categories generated into `references/ultra-categories.json` by `build_checks.py`.
       `node --check` clean.
 
+- [x] Build step 2: ran ultra on `ultra-vuln-app`, diagnosed (Run 1 diagnosis in the design doc).
+- [x] Build steps 3+4: all corrections + deepenings landed — focusQueue, targeted later rounds,
+      safety preamble (trusted vs hostile no-shell), seed-from-scan Preflight, richer FINDING/
+      VERDICT schemas, diverse-lens verify, proximity dedup, engine stamp. `references/full-audit.md`
+      written; SKILL.md full->pointer + ultra reframe/limits. `node --check` clean, tests PASS.
+
 Next physical action:
 
-- [ ] Build step 2: build a small trace-tier vuln fixture (IDOR + SSRF + authz, not just grep
-      secrets) and run the ultra Workflow against it once. Watch it, diagnose from behavior.
-      (Real multi-agent token spend — get the go first.)
+- [ ] Build step 5: re-run the corrected ultra script on `ultra-vuln-app` to confirm the fixes
+      fire (focusQueue sweeps gaps, SSRF de-dups to one, secret folds in pre-located as a seed).
+      Real token spend — get the go. Then record in RUNTIME_VERIFICATION_QUEUE.md.
+      Follow-ons (not blockers): SARIF `llm`-run plumbing in scan.py; `args`-delivery fix.
 
 Rule: when you finish a step, check it off and write the next single tiny step. Do not start another thread until this one ships or you consciously move it to the Queue.
 
