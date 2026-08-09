@@ -25,11 +25,15 @@ Thumbs.db
 .claude/settings.local.json
 
 # Internal direction/planning — kept local, not a public artifact
+# (skill installers get the whole repo, so working state stays out of git)
 ROADMAP.md
 INSTALL_GATE.md
-.gantry/active-phase.json
-.gantry/models.json
-.gantry/headless-implementer-settings.json
+NOW.md
+IDEAS.md
+SHIPPED.md
+.gantry/
+docs/CURRENTNESS_AUDIT.md
+docs/RUNTIME_VERIFICATION_QUEUE.md
 
 # ClauDHD local session state
 .now/
