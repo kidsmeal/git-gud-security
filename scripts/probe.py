@@ -683,16 +683,52 @@ def analyze(t, patterns):
     return out
 
 
+def _error_body(result):
+    """If the first text block is a JSON error envelope (HTTP status >= 400, `object: error`,
+    or a top-level `error`), return a short label; else None."""
+    for c in result.get("content") or []:
+        if not (isinstance(c, dict) and isinstance(c.get("text"), str)):
+            continue
+        s = c["text"].strip()
+        if not s.startswith("{"):
+            return None
+        try:
+            d = json.loads(s)
+        except ValueError:
+            return None
+        if not isinstance(d, dict):
+            return None
+        status = d.get("status") or d.get("statusCode")
+        if isinstance(status, str) and status.isdigit():
+            status = int(status)
+        if (isinstance(status, int) and status >= 400) or d.get("object") == "error" \
+                or status == "error" or "error" in d:
+            code = d.get("code") or (d.get("error") if isinstance(d.get("error"), str) else None)
+            label = f"http {status}" if isinstance(status, int) else "error body"
+            return f"{label}{f' ({code})' if code else ''}"
+        return None
+    return None
+
+
 def summary(t):
     """The transcript minus result bodies: safe to embed in the JSON report."""
     calls = []
     for c in t.get("calls", []):
         r = c.get("result")
+        ok = isinstance(r, dict) and not r.get("isError")
+        error = (c.get("error") or {}).get("message") if c.get("error") else None
+        if ok and not error:
+            # Many proxies return an upstream HTTP error as a plain text block with no
+            # isError. Read the body so the report says "http 401", not "ok".
+            body = _error_body(r)
+            if body:
+                ok = False
+                error = body
         calls.append({
             "tool": c.get("tool"), "why": c.get("why"), "ms": c.get("ms"),
-            "ok": isinstance(r, dict) and not r.get("isError"),
+            "ok": ok,
             "blocks": len(r.get("content") or []) if isinstance(r, dict) else 0,
-            "error": (c.get("error") or {}).get("message") if c.get("error") else None,
+            "error": error,
         })
     called = {c["tool"] for c in calls}
     tools = [{"name": x.get("name"), "readOnly": is_read_only(x), "called": x.get("name") in called}
