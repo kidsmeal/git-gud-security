@@ -368,6 +368,12 @@
   [
     "hardcoded-api-key-literal",
     "secrets.ts",
+    17,
+    "critical"
+  ],
+  [
+    "hardcoded-api-key-literal",
+    "secrets.ts",
     20,
     "critical"
   ],
@@ -528,9 +534,45 @@
     "high"
   ],
   [
+    "mcp-tool-result-model-directive",
+    "upsell-mcp.ts",
+    9,
+    "high"
+  ],
+  [
+    "mcp-tool-result-model-directive",
+    "upsell-mcp.ts",
+    10,
+    "high"
+  ],
+  [
+    "mcp-tool-result-model-directive",
+    "upsell-mcp.ts",
+    11,
+    "high"
+  ],
+  [
+    "mcp-tool-result-model-directive",
+    "upsell-mcp.ts",
+    13,
+    "high"
+  ],
+  [
     "mcp-tool-shell-passthrough",
     "injection.py",
     6,
+    "critical"
+  ],
+  [
+    "mcp-unauthenticated-network-server",
+    "upsell-mcp.ts",
+    17,
+    "critical"
+  ],
+  [
+    "mcp-unauthenticated-network-server",
+    "upsell-mcp.ts",
+    18,
     "critical"
   ],
   [

@@ -198,7 +198,7 @@ deterministic quick tier; ask for full or ultra to trace reachability before tru
 
 ## Check library
 
-[`references/checks.md`](references/checks.md) has the full library: 332 checks across 19 categories. Of those, 80 are wired into the standalone scanner as deterministic patterns; the rest are reasoned about by the LLM in `full`/`ultra`. [`references/readme-redflags.md`](references/readme-redflags.md) is the fast lookup for readme mode.
+[`references/checks.md`](references/checks.md) has the full library: 333 checks across 19 categories. Of those, 82 are wired into the standalone scanner as deterministic patterns; the rest are reasoned about by the LLM in `full`/`ultra`. [`references/readme-redflags.md`](references/readme-redflags.md) is the fast lookup for readme mode.
 
 To add or change checks, edit `scripts/checks.data.json` and rebuild:
 

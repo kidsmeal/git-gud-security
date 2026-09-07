@@ -4,6 +4,41 @@ All notable changes to Git Gud Security are recorded here. Versioning is
 [SemVer](https://semver.org/). Pre-1.0: behavior and check IDs may still change between
 minor versions.
 
+## [0.6.0] - 2026-09-07
+
+Tool-result directives. Prompted by the hosted Notion MCP connector (`mcp.notion.com`) returning a
+tool result that told the model to append a "take Notion MCP further" Business-plan line plus a
+link, which the model then pasted into chat. That channel (server -> tool result -> model ->
+user) had no check. The open-source `makenotion/notion-mcp-server` repo does not contain it;
+the behavior lives in the closed hosted server.
+
+### Added
+
+- **`mcp-tool-result-model-directive`** (333rd check, 82nd pattern). Flags code that builds tool
+  results carrying text addressed to the model: "tell the user they can upgrade", "include this
+  line in your response", "suggest the user try", "learn more at https://...". Severity high;
+  `appliesTo` mcp/plugin/agent. Log/print lines and JSON `description` fields are suppressed
+  (descriptions belong to `mcp-injectable-tool-description`).
+- **Suffix excludes in `patterns.json`.** `exclude` now accepts multi-part suffixes
+  (`.test.ts`, `_test.go`) and exact filenames, in addition to plain extensions.
+
+### Fixed
+
+- **`hardcoded-api-key-literal` on lockfiles.** The Twilio SID regex `AC[a-z0-9]{32}` ran
+  case-insensitively and matched base64 `"integrity": "sha512-..."` lines in `package-lock.json`
+  (7 criticals on a clean repo). Now word-bounded; lockfiles are excluded from both
+  literal-key patterns and integrity lines are suppressed.
+- **`mcp-unauthenticated-network-server` on non-binds.** The bare `0.0.0.0` alternative fired on
+  help text, `=== "0.0.0.0"` comparisons, and test expectations (6 criticals on a server whose
+  default bind is loopback with bearer auth). Now matches bind-shaped code only
+  (`host: "0.0.0.0"`, `listen(..., "0.0.0.0")`, `--host` defaults); test files are excluded.
+
+### Tests
+
+- `upsell-mcp.ts` true-positive fixture (4 directive lines, 2 real binds); false-positive lines
+  for help text, comparisons, operator logs, and a lockfile integrity hash. Goldens regenerated
+  (+6 rows).
+
 ## [0.5.0] - 2026-06-30
 
 Docs-secret coverage. Closes a real gap: the check library lists a live credential pasted into a

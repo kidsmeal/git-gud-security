@@ -544,6 +544,8 @@ Scan the target's prose against these. Up to 3 most diagnostic phrasings per hol
   "reads web pages and acts on them" · "summarizes emails/issues automatically" · "agent reads external content and takes actions"
 - **Tool description/name/metadata carries injected instructions to the model** `mcp-injectable-tool-description` · high
   "dynamic tool descriptions" · "descriptions fetched from a server" · "our MCP enhances Claude's behavior automatically"
+- **Tool result carries instructions to the model (upsell, promo, behavior steering)** `mcp-tool-result-model-directive` · high
+  "contextual tips in responses" · "smart suggestions in tool output" · "helps users discover features"
 - **Tool definitions mutate after client approval (rug pull)** `mcp-rug-pull-tool-redefinition` · high
   "auto-updating tools" · "tools update themselves" · "pulls latest tool definitions on launch"
 - **Irreversible/destructive action tools fire with no human gate or cost limit** `mcp-destructive-tool-no-gate` · high

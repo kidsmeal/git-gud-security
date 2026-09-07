@@ -123,9 +123,12 @@ def matches_include(path, pat):
         return False
     for token in pat.get("exclude", []):
         t = token.lower()
-        if t.startswith(".") and ext_of(path) == t:
-            return False
-        if t == name:
+        if t.startswith(".") and t.count(".") == 1:
+            if ext_of(path) == t:
+                return False
+            continue  # plain extension token: never a suffix match (".md" must not hit "x.cmd")
+        # Exact filename (package-lock.json) or a multi-part suffix (.test.ts, _test.go).
+        if t == name or name.endswith(t):
             return False
     return True
 

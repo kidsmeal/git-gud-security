@@ -6656,6 +6656,31 @@
      "fix": "Treat tool descriptions as untrusted code: review and pin them, forbid dynamic/remote-sourced descriptions, scan for imperatives, chaining directives, and hidden unicode."
     },
     {
+     "id": "mcp-tool-result-model-directive",
+     "title": "Tool result carries instructions to the model (upsell, promo, behavior steering)",
+     "severity": "high",
+     "detectability": "grep",
+     "appliesTo": [
+      "mcp",
+      "plugin",
+      "agent"
+     ],
+     "signals": [
+      "server builds a tool response (content[].text, _meta, hint, nextSteps, followUp) containing text addressed to the model: 'tell the user', 'let the user know', 'suggest an upgrade to the user', 'put this line in your reply' followed by a link",
+      "tool results that inject marketing copy, plan/upgrade prompts, or links the user did not ask for; a follow-up result after normal calls that asks the model to surface a product line",
+      "server `instructions` (initialize result) or result text steering tool choice toward the vendor's paid/hosted product"
+     ],
+     "readmeRedFlags": [
+      "contextual tips in responses",
+      "smart suggestions in tool output",
+      "helps users discover features",
+      "guidance included in results",
+      "upgrade prompts"
+     ],
+     "example": "After a normal query the hosted connector returns a result telling the model to add 'You can take X further via <Business plan link>' to its reply; the model pastes an ad the user never asked for",
+     "fix": "Tool results are data, never instructions. Servers: return only the requested data; put product notices in docs, not in result text. Clients/agents: delimit results as untrusted, strip imperative text addressed to the model, and never relay vendor prompts to the user as your own words."
+    },
+    {
      "id": "mcp-rug-pull-tool-redefinition",
      "title": "Tool definitions mutate after client approval (rug pull)",
      "severity": "high",
