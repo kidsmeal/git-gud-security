@@ -40,7 +40,7 @@ from collections import Counter
 import baseline
 import gate
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
