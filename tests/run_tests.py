@@ -814,6 +814,163 @@ def test_gate_format():
         print("  PASS: malicious -> DO NOT INSTALL (install-time), clean -> LOOKS CLEAN")
 
 
+PROBE_FIXTURES = os.path.join(FIXTURES, "probe-servers")
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import probe  # noqa: E402
+
+
+def _probe_fixture(name):
+    return [sys.executable, os.path.join(PROBE_FIXTURES, name)]
+
+
+def test_probe_upsell():
+    """The misbehaving fixture must light up every probe channel: instructions directive,
+    poisoned description (+ zero-width), result-text directive, _meta side channel, and the
+    second-list rug pull. Destructive tools must never be called."""
+    global failed
+    print("\n--- probe: upsell/poisoned fixture ---")
+    patterns, _ = scan.load_patterns()
+    t = probe.run_probe(_probe_fixture("upsell_server.py"), calls=5, timeout=20)
+    f = probe.analyze(t, patterns)
+    got = {(x["id"], x["file"]) for x in f}
+    want = {
+        ("mcp-tool-result-model-directive", "mcp://initialize/instructions"),
+        ("mcp-injectable-tool-description", "mcp://tools/acme-search/description"),
+        ("invisible-unicode-in-instructions", "mcp://tools/acme-search/description"),
+        ("mcp-tool-result-model-directive", "mcp://tools/acme-search/result"),
+        ("mcp-tool-result-model-directive", "mcp://tools/acme-search/result/_meta.followUp"),
+        ("mcp-tool-result-model-directive", "mcp://tools/acme-env/result/notice"),
+        ("mcp-rug-pull-tool-redefinition", "mcp://tools/list#2"),
+    }
+    problems = []
+    missing = want - got
+    if missing:
+        problems.append(f"missing {sorted(missing)}")
+    per_file = {}
+    for x in f:
+        per_file.setdefault(x["file"], []).append(x["severity"])
+    if len(per_file.get("mcp://tools/acme-search/result/_meta.followUp", [])) != 1:
+        problems.append("_meta.followUp reported twice (side-channel medium not deduped)")
+    if per_file.get("mcp://tools/acme-env/result/notice") != ["medium"]:
+        problems.append("side-channel `notice` key not reported as a single medium")
+    called = {c["tool"] for c in t["calls"]}
+    if called != {"acme-search", "acme-env"}:
+        problems.append(f"called {sorted(called)}, wanted the two read-only tools only")
+    if t.get("fatal") or t.get("exit_code") is None:
+        problems.append(f"fatal={t.get('fatal')} exit={t.get('exit_code')}")
+    if any(x.get("engine") != "probe" for x in f):
+        problems.append("findings not stamped engine=probe")
+    if problems:
+        failed = True
+        print("  FAIL: " + "; ".join(problems))
+    else:
+        print(f"  PASS: {len(f)} findings across instructions/description/result/_meta/drift; "
+              f"destructive tool not called")
+
+
+def test_probe_clean():
+    """A well-behaved server yields zero findings and a clean exit."""
+    global failed
+    print("\n--- probe: clean fixture ---")
+    patterns, _ = scan.load_patterns()
+    t = probe.run_probe(_probe_fixture("clean_server.py"), calls=5, timeout=20)
+    f = probe.analyze(t, patterns)
+    if f or t.get("fatal") or len(t["calls"]) != 1:
+        failed = True
+        print(f"  FAIL: findings={[(x['id'], x['file']) for x in f]} fatal={t.get('fatal')} "
+              f"calls={len(t['calls'])}")
+    else:
+        print("  PASS: 0 findings, 1 read-only call, clean exit")
+
+
+def test_probe_env_isolation():
+    """The child must not see the parent's env or HOME unless --probe-env names the var."""
+    global failed
+    print("\n--- probe: env isolation ---")
+    os.environ["GGS_PROBE_SECRET"] = "s3cret-value"
+    real_home = os.path.expanduser("~")
+    problems = []
+    try:
+        def echoed(t):
+            for c in t["calls"]:
+                if c["tool"] == "acme-env" and isinstance(c.get("result"), dict):
+                    return json.loads(c["result"]["content"][0]["text"])
+            return {}
+        t = probe.run_probe(_probe_fixture("upsell_server.py"), calls=5, timeout=20)
+        e = echoed(t)
+        if e.get("secret") != "<unset>":
+            problems.append(f"secret leaked without --probe-env: {e.get('secret')!r}")
+        if not e.get("home") or os.path.normcase(e["home"]) == os.path.normcase(real_home):
+            problems.append(f"HOME not isolated: {e.get('home')!r}")
+        t = probe.run_probe(_probe_fixture("upsell_server.py"), env_allow=["GGS_PROBE_SECRET"],
+                            calls=5, timeout=20)
+        if echoed(t).get("secret") != "s3cret-value":
+            problems.append("--probe-env KEY did not pass the var through")
+        t = probe.run_probe(_probe_fixture("upsell_server.py"), env_allow=["GGS_PROBE_SECRET=lit"],
+                            calls=5, timeout=20)
+        if echoed(t).get("secret") != "lit":
+            problems.append("--probe-env KEY=VAL did not set the literal")
+    finally:
+        del os.environ["GGS_PROBE_SECRET"]
+    if problems:
+        failed = True
+        print("  FAIL: " + "; ".join(problems))
+    else:
+        print("  PASS: env scrubbed and HOME isolated by default; passthrough only when named")
+
+
+def test_probe_timeout():
+    """A server that never answers must be reported as fatal within the timeout and be dead
+    afterwards (no zombie left running)."""
+    global failed
+    print("\n--- probe: hang -> timeout + kill ---")
+    import time
+    t0 = time.monotonic()
+    t = probe.run_probe(_probe_fixture("hang_server.py"), calls=5, timeout=2)
+    took = time.monotonic() - t0
+    if "no response" in (t.get("fatal") or "") and t.get("exit_code") is not None and took < 15:
+        print(f"  PASS: fatal after {took:.1f}s, server exit code {t['exit_code']}")
+    else:
+        failed = True
+        print(f"  FAIL: fatal={t.get('fatal')!r} exit={t.get('exit_code')} took={took:.1f}s")
+
+
+def test_probe_cli():
+    """End to end: --mcp-cmd renders the probe report with a verdict; --url + --mcp-cmd is
+    refused (the gate never executes)."""
+    global failed
+    print("\n--- probe: CLI --mcp-cmd + --format probe ---")
+    problems = []
+    cmd = f'"{sys.executable}" "{os.path.join(PROBE_FIXTURES, "upsell_server.py")}"'
+    r = subprocess.run([sys.executable, SCAN_PY, "--mcp-cmd", cmd, "--probe-calls", "5"],
+                       capture_output=True, text=True, encoding="utf-8")
+    if r.returncode != 0:
+        problems.append(f"rc={r.returncode} stderr={r.stderr.strip()[-200:]}")
+    if "DO NOT INSTALL" not in r.stdout or "mcp-tool-result-model-directive" not in r.stdout:
+        problems.append("probe report missing verdict/finding")
+    if "the server WAS executed" not in r.stdout:
+        problems.append("probe report missing the executed-target footer")
+    j = subprocess.run([sys.executable, SCAN_PY, "--mcp-cmd", cmd, "--format", "json"],
+                       capture_output=True, text=True, encoding="utf-8")
+    try:
+        d = json.loads(j.stdout)
+        if not d.get("probe") or "result" in json.dumps(d["probe"].get("calls")):
+            problems.append("json output missing probe summary or leaking result bodies")
+        if not all(f.get("engine") == "probe" for f in d["findings"]):
+            problems.append("json findings not stamped engine=probe")
+    except ValueError:
+        problems.append("json output not valid JSON")
+    bad = subprocess.run([sys.executable, SCAN_PY, "--url", "x/y", "--mcp-cmd", cmd],
+                         capture_output=True, text=True, encoding="utf-8")
+    if bad.returncode != 2 or "never-execute" not in bad.stderr:
+        problems.append("--url + --mcp-cmd was not refused")
+    if problems:
+        failed = True
+        print("  FAIL: " + "; ".join(problems))
+    else:
+        print("  PASS: probe report + json summary + gate/probe exclusion")
+
+
 if __name__ == "__main__":
     if UPDATE:
         # Only regenerate the goldens; skip assertions.
@@ -847,6 +1004,11 @@ if __name__ == "__main__":
     test_baseline_roundtrip()
     test_baseline_audit()
     test_baseline_gate_refusal()
+    test_probe_upsell()
+    test_probe_clean()
+    test_probe_env_isolation()
+    test_probe_timeout()
+    test_probe_cli()
     test_findings_exact("quick")
     test_findings_exact("readme")
     test_false_positives("quick")

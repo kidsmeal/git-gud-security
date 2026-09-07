@@ -39,8 +39,9 @@ from collections import Counter
 
 import baseline
 import gate
+import probe
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -737,7 +738,83 @@ def to_gate(out):
     return "\n".join(lines) + "\n"
 
 
+def to_probe(out):
+    """Live-probe report: what the server said to the model, verdict first. The server WAS
+    executed, so the footer names the isolation and what was passed through."""
+    p = out.get("probe") or {}
+    findings = out["findings"]
+    c = out["counts"]
+    verdict = gate_verdict(findings)
+    si = p.get("serverInfo") or {}
+    name = si.get("name") or (p.get("cmd") or "server").split()[0]
+    ver = si.get("version")
+    tools = p.get("tools") or []
+    calls = p.get("calls") or []
+    ro = sum(1 for t in tools if t.get("readOnly"))
+    lines = [f"Git Gud Security — live probe · {name}" + (f" {ver}" if ver else ""),
+             f"  cmd: {p.get('cmd')}",
+             f"  protocol {p.get('protocolVersion') or '?'} · {len(tools)} tools ({ro} read-only) · "
+             f"{len(calls)} calls · exit {p.get('exit_code')} · {(p.get('duration_ms') or 0) / 1000:.1f}s",
+             f"  Verdict: {verdict:<16} {c['critical']} critical · {c['high']} high · "
+             f"{c['medium']} medium · {c['low']} low"]
+    instr = p.get("instructions")
+    lines.append("  instructions: " + (instr.replace("\n", " ")[:160] if instr else "(none)"))
+    lines.append("")
+    if findings:
+        lines.append("FINDINGS  (what the server put in front of the model)")
+        for i, f in enumerate(findings, 1):
+            loc = f"{f['file']}:{f['line']}" if f.get("line") else f["file"]
+            lines.append(f" {i:>2}. {f['severity'].upper():<8} {f['id']:<40} {loc}")
+            if f.get("snippet"):
+                lines.append(f"     > {f['snippet'][:160]}")
+            if f.get("fix"):
+                lines.append(f"     fix: {f['fix']}")
+        lines.append("")
+    else:
+        lines.append("  nothing addressed to the model in this pass.")
+        lines.append("")
+    if calls:
+        lines.append("CALLS")
+        for cl in calls:
+            state = "ok" if cl.get("ok") else ("error: " + str(cl.get("error") or "isError"))
+            lines.append(f"  {cl['tool']:<36} {cl.get('why', ''):<8} {str(cl.get('ms')) + 'ms':>8}  "
+                         f"{state}  {cl.get('blocks', 0)} block(s)")
+        lines.append("")
+    skipped = [t["name"] for t in tools if not t.get("called")]
+    if skipped:
+        lines.append("not called: " + ", ".join(str(s) for s in skipped[:20])
+                     + (f" (+{len(skipped) - 20})" if len(skipped) > 20 else ""))
+    for e in p.get("errors") or []:
+        lines.append(f"  ! {e}")
+    if p.get("server_messages"):
+        lines.append("  server-initiated: " + ", ".join(p["server_messages"][:10]))
+    lines.append("")
+    passthrough = ", ".join(p.get("env_passthrough") or []) or "none"
+    lines.append(f"the server WAS executed: isolated cwd + empty HOME, scrubbed env, "
+                 f"passthrough: {passthrough}. read-only tools only unless --probe-tool named one.")
+    lines.append("one pass. behavior gated on plan tier, call count, or time may not have "
+                 "triggered; re-run with --probe-tool / --probe-out to read the raw transcript.")
+    return "\n".join(lines) + "\n"
+
+
+def _utf8_streams():
+    """Reports carry non-ASCII (the separators, and now snippets of whatever a probed server
+    sent). A cp1252 console or pipe must not crash the run: piped output is written as UTF-8,
+    a terminal keeps its own encoding with unencodable characters replaced."""
+    for stream in (sys.stdout, sys.stderr):
+        if not hasattr(stream, "reconfigure"):
+            continue
+        try:
+            if stream.isatty():
+                stream.reconfigure(errors="replace")
+            else:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
 def main():
+    _utf8_streams()
     ap = argparse.ArgumentParser(
         description="Git Gud Security deterministic sweep. Output is CANDIDATE findings "
                     "that need confirmation at file:line before reporting.")
@@ -756,7 +833,23 @@ def main():
     ap.add_argument("--version", action="version", version=f"git-gud-security {__version__}")
     ap.add_argument("--mode", default="quick", choices=["readme", "quick", "full", "ultra"])
     ap.add_argument("--json", action="store_true", help="(deprecated alias for --format json)")
-    ap.add_argument("--format", default=None, choices=["json", "sarif", "text", "gate"],
+    ap.add_argument("--mcp-cmd", default=None, metavar="CMD",
+                    help="LIVE PROBE: spawn this stdio MCP server command (isolated cwd, scrubbed "
+                         "env), list its tools, call read-only ones, and flag text it sends to the "
+                         "model. Executes the target. Standalone, or alongside a repo path.")
+    ap.add_argument("--probe-env", nargs="*", default=[], metavar="KEY|KEY=VAL",
+                    help="env vars the probed server may see (copied from this env, or literal)")
+    ap.add_argument("--probe-calls", type=int, default=probe.DEFAULT_CALLS, metavar="N",
+                    help=f"max read-only tools to call automatically (default {probe.DEFAULT_CALLS}; "
+                         "0 = list only)")
+    ap.add_argument("--probe-tool", action="append", default=[], metavar="NAME[=JSON]",
+                    help="call this tool regardless of read-only heuristics, with optional JSON "
+                         "args (repeatable)")
+    ap.add_argument("--probe-timeout", type=int, default=probe.DEFAULT_TIMEOUT, metavar="SEC",
+                    help=f"per-request timeout (default {probe.DEFAULT_TIMEOUT})")
+    ap.add_argument("--probe-out", default=None, metavar="FILE",
+                    help="write the full raw probe transcript (JSON, includes result bodies) here")
+    ap.add_argument("--format", default=None, choices=["json", "sarif", "text", "gate", "probe"],
                     help="json (default, for the skill), sarif (GitHub code scanning), "
                          "text (terse summary, for a pre-commit hook), gate (pre-install "
                          "verdict; the default when --url is used)")
@@ -786,7 +879,20 @@ def main():
     if args.json:
         args.format = "json"
     elif args.format is None:
-        args.format = "gate" if args.url else "json"
+        args.format = "gate" if args.url else ("probe" if args.mcp_cmd and not args.repo else "json")
+
+    # The live probe executes the target; the --url gate promises it never does. Never combine
+    # them: gate a URL, then, if you decide to trial it, probe the installed command explicitly.
+    if args.mcp_cmd:
+        if args.url:
+            ap.error("--mcp-cmd executes the target; --url is the never-execute gate. Run the "
+                     "gate first, then probe the installed command separately.")
+        bad = [f for f, on in (("--staged", args.staged), ("--diff", args.diff),
+                               ("--baseline", args.baseline)) if on]
+        if bad:
+            ap.error(f"{', '.join(bad)} do not apply to a live probe")
+        if args.probe_calls < 0:
+            ap.error("--probe-calls must be >= 0")
 
     # full/ultra do dataflow tracing and adversarial verification — that needs an LLM, so
     # they live in the Claude Code skill, not this script. Don't fake them by aliasing quick.
@@ -848,8 +954,10 @@ def main():
         if not os.path.isdir(root):
             print(json.dumps({"error": f"not a directory: {root}"}))
             sys.exit(1)
+    elif args.mcp_cmd:
+        root = None  # probe-only run: no static tiers
     else:
-        ap.error("a repo path or --url is required")
+        ap.error("a repo path, --url, or --mcp-cmd is required")
 
     if args.exclude:
         ex_dirs, ex_globs = split_excludes(args.exclude)
@@ -873,47 +981,80 @@ def main():
                   f"scanning the whole repo instead.", file=sys.stderr)
 
     print(f"git-gud-security: {len(patterns)} patterns, mode={args.mode}"
-          f"{', staged only' if scan_files is not None else ''}. "
+          f"{', staged only' if scan_files is not None else ''}"
+          f"{', live probe' if args.mcp_cmd else ''}. "
           f"Output is candidate findings, not confirmed vulnerabilities.",
           file=sys.stderr)
 
-    # Shared across modes (quick is a strict superset of readme): prose red-flag scan,
-    # filename checks, .env hygiene.
-    prose_findings = scan_prose_redflags(root, load_readme_phrases(), files=scan_files)
-    name_findings = scan_filenames(root, patterns, files=scan_files)
-    env_findings = check_env_hygiene(root, files=scan_files)
+    findings = []
+    files_scanned = 0
+    if root is not None:
+        # Shared across modes (quick is a strict superset of readme): prose red-flag scan,
+        # filename checks, .env hygiene.
+        prose_findings = scan_prose_redflags(root, load_readme_phrases(), files=scan_files)
+        name_findings = scan_filenames(root, patterns, files=scan_files)
+        env_findings = check_env_hygiene(root, files=scan_files)
 
-    if args.mode == "readme":
-        # readme: config-tier content only, no grep tier.
-        content_pats = [p for p in patterns if p.get("detectability") == "config"
-                        and p.get("kind", "content") == "content"]
-        content_findings, files_scanned = scan_content(root, content_pats, do_redact, files=scan_files)
-    else:
-        # quick: every grep + config pattern, plus a secret/sourcemap sweep of build output.
-        content_findings, files_scanned = scan_content(root, patterns, do_redact, files=scan_files)
-        # Build-output sweep walks dirs the normal pass skips; in staged mode the staged file
-        # list already includes any staged bundle, so only run it on a whole-tree scan.
-        if scan_files is None:
-            build_dirs = BUILD_OUTPUT - set(args.exclude)
-            build_skip = ALWAYS_SKIP | set(args.exclude)
-            content_findings += scan_build_output(root, patterns, do_redact, build_dirs, build_skip)
+        if args.mode == "readme":
+            # readme: config-tier content only, no grep tier.
+            content_pats = [p for p in patterns if p.get("detectability") == "config"
+                            and p.get("kind", "content") == "content"]
+            content_findings, files_scanned = scan_content(root, content_pats, do_redact, files=scan_files)
+        else:
+            # quick: every grep + config pattern, plus a secret/sourcemap sweep of build output.
+            content_findings, files_scanned = scan_content(root, patterns, do_redact, files=scan_files)
+            # Build-output sweep walks dirs the normal pass skips; in staged mode the staged file
+            # list already includes any staged bundle, so only run it on a whole-tree scan.
+            if scan_files is None:
+                build_dirs = BUILD_OUTPUT - set(args.exclude)
+                build_skip = ALWAYS_SKIP | set(args.exclude)
+                content_findings += scan_build_output(root, patterns, do_redact, build_dirs, build_skip)
 
-    content_findings += prose_findings
+        content_findings += prose_findings
 
-    findings = content_findings + name_findings + env_findings
-    # Safety net for the path globs: filename/env/prose findings don't pass through
-    # scan_content's per-file check, so drop any whose path matches a --exclude glob here too.
-    if EXCLUDE_GLOBS:
-        findings = [f for f in findings if not path_excluded(f["file"])]
+        findings = content_findings + name_findings + env_findings
+        # Safety net for the path globs: filename/env/prose findings don't pass through
+        # scan_content's per-file check, so drop any whose path matches a --exclude glob here too.
+        if EXCLUDE_GLOBS:
+            findings = [f for f in findings if not path_excluded(f["file"])]
+
+    # Live probe: execute the MCP server command in isolation, record everything it says to
+    # the model, and run the directive/injection regexes over that transcript. Result bodies
+    # stay out of the JSON report (they can hold the user's own data); --probe-out dumps them.
+    probe_summary = None
+    if args.mcp_cmd:
+        print(f"git-gud-security: live probe, executing: {args.mcp_cmd}", file=sys.stderr)
+        try:
+            transcript = probe.run_probe(args.mcp_cmd, env_allow=args.probe_env,
+                                         calls=args.probe_calls, timeout=args.probe_timeout,
+                                         tool_specs=args.probe_tool, version=__version__)
+        except probe.ProbeError as e:
+            print(json.dumps({"error": f"probe: {e}"}))
+            sys.exit(1)
+        if args.probe_out:
+            with open(args.probe_out, "w", encoding="utf-8") as f:
+                json.dump(transcript, f, indent=2, ensure_ascii=False)
+        if transcript.get("fatal") and not transcript.get("tools"):
+            print(json.dumps({"error": f"probe: {transcript['fatal']}",
+                              "stderr_tail": (transcript.get("stderr_tail") or "")[-1000:]}))
+            sys.exit(1)
+        probe_findings = probe.analyze(transcript, patterns)
+        if do_redact:
+            for f in probe_findings:
+                f["snippet"] = scrub(f["snippet"])
+        findings += probe_findings
+        probe_summary = probe.summary(transcript)
+
     sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     findings.sort(key=lambda f: (sev_order.get(f["severity"], 9), f["file"], f["line"]))
     # This script is the deterministic engine, so stamp every finding it produces accordingly
-    # (the skill stamps its trace/adversarial findings `llm`). Exposed in JSON and split into
-    # per-engine runs in SARIF. Note: a finding can be deterministic-engine yet carry a
-    # `trace` detectability — the tier describes the check, the engine describes who fired it.
+    # (the skill stamps its trace/adversarial findings `llm`; the live probe stamps `probe`).
+    # Exposed in JSON and split into per-engine runs in SARIF. Note: a finding can be
+    # deterministic-engine yet carry a `trace` detectability — the tier describes the check,
+    # the engine describes who fired it.
     it_cats = install_time_categories()
     for f in findings:
-        f["engine"] = "deterministic"
+        f.setdefault("engine", "deterministic")
         # Does this finding fire when the artifact is installed/loaded into an agent? The gate
         # surfaces these first and the verdict blocks on a critical/high among them.
         f["install_time"] = f.get("category") in it_cats
@@ -950,7 +1091,7 @@ def main():
         "version": __version__,
         "mode": args.mode,
         # For a gate run, name the URL@sha that was vetted, not the throwaway temp path.
-        "repo": gate_meta["url"] if gate_meta else root.replace("\\", "/"),
+        "repo": gate_meta["url"] if gate_meta else (root.replace("\\", "/") if root else None),
         "scanned": {"files": files_scanned, "pattern_count": len(patterns)},
         "counts": {
             s: sum(1 for f in findings if f["severity"] == s)
@@ -962,6 +1103,8 @@ def main():
     }
     if gate_meta:
         out["gate"] = gate_meta
+    if probe_summary is not None:
+        out["probe"] = probe_summary
     if args.baseline:
         # Observable suppression: the suppressed findings and any audit warnings ride along in
         # the output so a consumer can see exactly what the baseline hid and why.
@@ -979,6 +1122,8 @@ def main():
         payload = to_text(out)
     elif args.format == "gate":
         payload = to_gate(out)
+    elif args.format == "probe":
+        payload = to_probe(out)
     else:
         payload = json.dumps(out, indent=2)
     if args.out:

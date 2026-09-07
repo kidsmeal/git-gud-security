@@ -4,6 +4,43 @@ All notable changes to Git Gud Security are recorded here. Versioning is
 [SemVer](https://semver.org/). Pre-1.0: behavior and check IDs may still change between
 minor versions.
 
+## [0.7.0] - 2026-09-07
+
+Live MCP probe, stdio transport. 0.6.0 added the check for tool results that carry
+instructions to the model, but a static scan only sees that when the server's source is on
+disk. The hosted Notion connector that prompted it is closed source: the directive arrives at
+runtime, inside a tool result. The probe connects as a real MCP client and reads what the
+server actually says.
+
+### Added
+
+- **`scan.py --mcp-cmd "<command>"`** (`scripts/probe.py`, stdlib only). Spawns the server in a
+  throwaway cwd with a scrubbed environment (PATH + OS basics, empty HOME/USERPROFILE, no
+  interpreter preload vars), then `initialize` -> `tools/list` -> `tools/call` on up to N tools
+  judged read-only (`readOnlyHint`, or a get/list/search/... name with no destructive hint) with
+  schema-derived placeholder args -> `tools/list` again -> close/terminate/kill. Per-request
+  timeout, per-message and total byte caps, server-initiated `ping`/`roots/list` answered.
+- **Surfaces analyzed**: `initialize.instructions`, every tool description (including nested
+  schema descriptions), every result's text blocks and `structuredContent`, string entries under
+  `_meta`, any non-spec top-level result key, and the first-vs-second tool list. Findings reuse
+  existing ids: `mcp-tool-result-model-directive` (result/instructions text; medium for a
+  side-channel key carrying prose), `mcp-injectable-tool-description`,
+  `invisible-unicode-in-instructions`, `mcp-rug-pull-tool-redefinition`. Stamped
+  `engine: probe`, `detectability: runtime`, located as `mcp://tools/<name>/result:<line>`.
+- **Flags**: `--probe-env KEY|KEY=VAL` (the only way a var reaches the child), `--probe-calls N`
+  (0 = list only), `--probe-tool NAME[=JSON]` (call a named tool regardless of heuristics),
+  `--probe-timeout SEC`, `--probe-out FILE` (raw transcript with result bodies; the JSON report
+  carries a summary only). `--format probe` is the default for a probe-only run.
+- **Refusals**: `--mcp-cmd` with `--url` (the gate never executes), `--staged`, `--diff`, or
+  `--baseline`.
+
+### Tests
+
+- Three fixture servers under `tests/fixtures/probe-servers/`: upsell/poisoned (every channel
+  fires, destructive tool never called), clean (zero findings), hang (timeout + kill). Env
+  isolation: parent var invisible by default, visible via `--probe-env`, HOME not the real one.
+  CLI end to end incl. the `--url` exclusion.
+
 ## [0.6.0] - 2026-09-07
 
 Tool-result directives. Prompted by the hosted Notion MCP connector (`mcp.notion.com`) returning a
