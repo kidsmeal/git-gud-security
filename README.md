@@ -243,7 +243,34 @@ hold your own data); `--probe-out` writes the raw transcript.
 **This executes the target.** Run the `--url` gate first and only probe a server you have
 decided to trial. `--mcp-cmd` refuses to combine with `--url`. One pass is one pass: behavior
 gated on plan tier, call count, or time may not trigger; use `--probe-tool` to hit a specific
-tool and read the transcript. Remote (Streamable HTTP + OAuth) servers are not yet supported.
+tool and read the transcript.
+
+### Remote servers (Streamable HTTP + OAuth)
+
+Hosted servers are the ones with no source to read. `--mcp-url` speaks Streamable HTTP to the
+endpoint and handles auth the way the MCP spec says: on a 401 it discovers the authorization
+server, registers itself as a public client, and runs authorization-code + PKCE through your
+browser. You click consent; the token is cached at `~/.ggs/mcp-tokens.json` (0600) and never
+printed. A bearer you already have goes in via an env var, never argv.
+
+```bash
+python scripts/scan.py --mcp-url https://mcp.notion.com/mcp                      # OAuth in your browser
+python scripts/scan.py --mcp-url https://mcp.example.com/mcp --bearer-env MY_TOKEN
+python scripts/scan.py --mcp-url https://mcp.notion.com/mcp --probe-tool notion-query-meeting-notes --probe-out t.json
+python scripts/scan.py --mcp-url ... --oauth-print-url                            # headless: prints the consent URL
+```
+
+Nothing runs locally except the client. Same analysis, same finding ids, located the same way.
+`--probe-out` transcripts can contain your identity (a `fetch self` result carries workspace
+and user ids); treat them like the token file.
+
+There is no way to check a hosted server without connecting: its instructions and results are
+generated per request, and most 401 even `tools/list`. So connect once, record, publish.
+[`references/probed-servers/`](references/probed-servers/) holds redacted transcript summaries
+of servers already probed; read the entry before granting one OAuth. First entry:
+[`notion-mcp.md`](references/probed-servers/notion-mcp.md), the hosted Notion MCP's
+plan-upsell mechanism (server instructions + two "next step" card tools + tracked links with
+the caller's account id).
 
 ## Check library
 

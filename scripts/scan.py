@@ -41,7 +41,7 @@ import baseline
 import gate
 import probe
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -751,10 +751,18 @@ def to_probe(out):
     tools = p.get("tools") or []
     calls = p.get("calls") or []
     ro = sum(1 for t in tools if t.get("readOnly"))
+    remote = p.get("transport") == "http"
+    if remote:
+        where = f"  url: {p.get('url')}  ·  auth: {p.get('auth')}"
+        tail = (f"http {'/'.join(str(s) for s in (p.get('http_statuses') or [])[-6:]) or '-'}"
+                f" · session {'yes' if p.get('session_id_seen') else 'no'}")
+    else:
+        where = f"  cmd: {p.get('cmd')}"
+        tail = f"exit {p.get('exit_code')}"
     lines = [f"Git Gud Security — live probe · {name}" + (f" {ver}" if ver else ""),
-             f"  cmd: {p.get('cmd')}",
+             where,
              f"  protocol {p.get('protocolVersion') or '?'} · {len(tools)} tools ({ro} read-only) · "
-             f"{len(calls)} calls · exit {p.get('exit_code')} · {(p.get('duration_ms') or 0) / 1000:.1f}s",
+             f"{len(calls)} calls · {tail} · {(p.get('duration_ms') or 0) / 1000:.1f}s",
              f"  Verdict: {verdict:<16} {c['critical']} critical · {c['high']} high · "
              f"{c['medium']} medium · {c['low']} low"]
     instr = p.get("instructions")
@@ -789,9 +797,13 @@ def to_probe(out):
     if p.get("server_messages"):
         lines.append("  server-initiated: " + ", ".join(p["server_messages"][:10]))
     lines.append("")
-    passthrough = ", ".join(p.get("env_passthrough") or []) or "none"
-    lines.append(f"the server WAS executed: isolated cwd + empty HOME, scrubbed env, "
-                 f"passthrough: {passthrough}. read-only tools only unless --probe-tool named one.")
+    if remote:
+        lines.append(f"remote server contacted over HTTP as {p.get('auth')}; nothing executed "
+                     f"locally. read-only tools only unless --probe-tool named one.")
+    else:
+        passthrough = ", ".join(p.get("env_passthrough") or []) or "none"
+        lines.append(f"the server WAS executed: isolated cwd + empty HOME, scrubbed env, "
+                     f"passthrough: {passthrough}. read-only tools only unless --probe-tool named one.")
     lines.append("one pass. behavior gated on plan tier, call count, or time may not have "
                  "triggered; re-run with --probe-tool / --probe-out to read the raw transcript.")
     return "\n".join(lines) + "\n"
@@ -837,6 +849,16 @@ def main():
                     help="LIVE PROBE: spawn this stdio MCP server command (isolated cwd, scrubbed "
                          "env), list its tools, call read-only ones, and flag text it sends to the "
                          "model. Executes the target. Standalone, or alongside a repo path.")
+    ap.add_argument("--mcp-url", default=None, metavar="URL",
+                    help="LIVE PROBE over Streamable HTTP: connect to a remote MCP endpoint "
+                         "(OAuth 2.1 via your browser on a 401, or a bearer from --bearer-env), "
+                         "list its tools, call read-only ones, flag text it sends to the model.")
+    ap.add_argument("--bearer-env", default=None, metavar="VAR",
+                    help="name of an env var holding a bearer token for --mcp-url (never argv)")
+    ap.add_argument("--token-file", default=None, metavar="FILE",
+                    help="where OAuth tokens for --mcp-url are cached (default ~/.ggs/mcp-tokens.json, 0600)")
+    ap.add_argument("--oauth-print-url", action="store_true",
+                    help="print the OAuth consent URL instead of opening a browser (headless)")
     ap.add_argument("--probe-env", nargs="*", default=[], metavar="KEY|KEY=VAL",
                     help="env vars the probed server may see (copied from this env, or literal)")
     ap.add_argument("--probe-calls", type=int, default=probe.DEFAULT_CALLS, metavar="N",
@@ -879,20 +901,28 @@ def main():
     if args.json:
         args.format = "json"
     elif args.format is None:
-        args.format = "gate" if args.url else ("probe" if args.mcp_cmd and not args.repo else "json")
+        probing = (args.mcp_cmd or args.mcp_url) and not args.repo
+        args.format = "gate" if args.url else ("probe" if probing else "json")
 
-    # The live probe executes the target; the --url gate promises it never does. Never combine
-    # them: gate a URL, then, if you decide to trial it, probe the installed command explicitly.
-    if args.mcp_cmd:
+    # The live probe executes/contacts the target; the --url gate promises it never does. Never
+    # combine them: gate a URL, then, if you decide to trial it, probe it explicitly.
+    if args.mcp_cmd or args.mcp_url:
+        if args.mcp_cmd and args.mcp_url:
+            ap.error("--mcp-cmd (stdio) and --mcp-url (HTTP) are two transports; pick one")
         if args.url:
-            ap.error("--mcp-cmd executes the target; --url is the never-execute gate. Run the "
-                     "gate first, then probe the installed command separately.")
+            ap.error("--mcp-cmd/--mcp-url execute or contact the target; --url is the "
+                     "never-execute gate. Run the gate first, then probe separately.")
         bad = [f for f, on in (("--staged", args.staged), ("--diff", args.diff),
                                ("--baseline", args.baseline)) if on]
         if bad:
             ap.error(f"{', '.join(bad)} do not apply to a live probe")
         if args.probe_calls < 0:
             ap.error("--probe-calls must be >= 0")
+        if args.mcp_url and args.probe_env:
+            ap.error("--probe-env is for a local stdio server; a remote server gets no env. "
+                     "Use --bearer-env for auth.")
+        if args.bearer_env and not args.mcp_url:
+            ap.error("--bearer-env only applies to --mcp-url")
 
     # full/ultra do dataflow tracing and adversarial verification — that needs an LLM, so
     # they live in the Claude Code skill, not this script. Don't fake them by aliasing quick.
@@ -954,10 +984,10 @@ def main():
         if not os.path.isdir(root):
             print(json.dumps({"error": f"not a directory: {root}"}))
             sys.exit(1)
-    elif args.mcp_cmd:
+    elif args.mcp_cmd or args.mcp_url:
         root = None  # probe-only run: no static tiers
     else:
-        ap.error("a repo path, --url, or --mcp-cmd is required")
+        ap.error("a repo path, --url, --mcp-cmd, or --mcp-url is required")
 
     if args.exclude:
         ex_dirs, ex_globs = split_excludes(args.exclude)
@@ -982,7 +1012,7 @@ def main():
 
     print(f"git-gud-security: {len(patterns)} patterns, mode={args.mode}"
           f"{', staged only' if scan_files is not None else ''}"
-          f"{', live probe' if args.mcp_cmd else ''}. "
+          f"{', live probe' if (args.mcp_cmd or args.mcp_url) else ''}. "
           f"Output is candidate findings, not confirmed vulnerabilities.",
           file=sys.stderr)
 
@@ -1022,12 +1052,28 @@ def main():
     # the model, and run the directive/injection regexes over that transcript. Result bodies
     # stay out of the JSON report (they can hold the user's own data); --probe-out dumps them.
     probe_summary = None
-    if args.mcp_cmd:
-        print(f"git-gud-security: live probe, executing: {args.mcp_cmd}", file=sys.stderr)
+    if args.mcp_cmd or args.mcp_url:
         try:
-            transcript = probe.run_probe(args.mcp_cmd, env_allow=args.probe_env,
-                                         calls=args.probe_calls, timeout=args.probe_timeout,
-                                         tool_specs=args.probe_tool, version=__version__)
+            if args.mcp_url:
+                bearer = None
+                if args.bearer_env:
+                    bearer = os.environ.get(args.bearer_env)
+                    if not bearer:
+                        ap.error(f"--bearer-env {args.bearer_env}: not set or empty")
+                print(f"git-gud-security: live probe, contacting: {args.mcp_url}", file=sys.stderr)
+                open_url = None
+                if args.oauth_print_url:
+                    open_url = lambda u: print(f"git-gud-security: open this URL to authorize:\n{u}",
+                                               file=sys.stderr)
+                transcript = probe.run_probe_url(args.mcp_url, bearer=bearer,
+                                                 calls=args.probe_calls, timeout=args.probe_timeout,
+                                                 tool_specs=args.probe_tool, version=__version__,
+                                                 token_file=args.token_file, open_url=open_url)
+            else:
+                print(f"git-gud-security: live probe, executing: {args.mcp_cmd}", file=sys.stderr)
+                transcript = probe.run_probe(args.mcp_cmd, env_allow=args.probe_env,
+                                             calls=args.probe_calls, timeout=args.probe_timeout,
+                                             tool_specs=args.probe_tool, version=__version__)
         except probe.ProbeError as e:
             print(json.dumps({"error": f"probe: {e}"}))
             sys.exit(1)

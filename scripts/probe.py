@@ -66,6 +66,24 @@ SIDE_CHANNEL_KEYS = {
     "announcement", "banner", "notice", "guidance",
 }
 
+# Regexes that only make sense on live transcript text (in source they would be noise: any
+# SaaS has its own upsell code). Applied to results, instructions, and descriptions.
+_PROBE_EXTRA = [re.compile(p, re.I) for p in (
+    r"\bupsell",
+    r"do not (mention|reveal|disclose|surface) (this|the|that|it)\b",
+    r"never mention (limits|eligibility|pricing|frequency)",
+    r"(free trial|full version|upgrade)[^\n]{0,80}https?://",
+)]
+
+# A link in a tool result whose query string carries attribution/tracking or the caller's
+# identity. The model is being handed a marketing link, and the ids inside it leak account
+# context into the conversation.
+_TRACKED_URL = re.compile(
+    r"https?://[^\s\"'<>)\]]+\?[^\s\"'<>)\]]*"
+    r"(utm_[a-z]+|source=|campaign=|click_?source|upsell|opportunity|account_?id|space_?id|user_?id)",
+    re.I,
+)
+
 _READ_ONLY_NAME = re.compile(
     r"^(?:[a-z0-9]+[-_.])*?(get|list|read|search|fetch|query|retrieve|describe|status|find|"
     r"lookup|show|browse|check|view)(?:[-_.]|$)",
@@ -408,10 +426,69 @@ def _list_tools(client):
     return tools
 
 
+def _run_sequence(client, t, calls, specs, version):
+    """initialize -> initialized -> tools/list -> planned tools/call -> tools/list again.
+    Transport-agnostic: `client` is a StdioClient or an HttpClient. Fills `t` in place and
+    lets transport/protocol exceptions propagate to the caller."""
+    client.start()
+    init = client.request("initialize", {
+        "protocolVersion": PROTOCOL_VERSION,
+        "capabilities": {},
+        "clientInfo": {"name": "git-gud-security-probe", "version": version},
+    })
+    if not isinstance(init, dict):
+        raise ProbeError("initialize: result is not an object")
+    t["serverInfo"] = init.get("serverInfo")
+    t["protocolVersion"] = init.get("protocolVersion")
+    t["capabilities"] = init.get("capabilities")
+    t["instructions"] = init.get("instructions")
+    client.notify("notifications/initialized")
+    t["tools"] = _list_tools(client)
+
+    plan = [(name, args, "explicit") for name, args in specs]
+    planned = {p[0] for p in plan}
+    auto = 0
+    if calls > 0:
+        for tool in t["tools"]:
+            if auto >= calls:
+                break
+            name = tool.get("name")
+            if not isinstance(name, str) or name in planned or not is_read_only(tool):
+                continue
+            plan.append((name, placeholder_args(tool.get("inputSchema")), "auto"))
+            planned.add(name)
+            auto += 1
+    by_name = {x.get("name"): x for x in t["tools"]}
+    for name, args, why in plan:
+        if name not in by_name:
+            t["errors"].append(f"--probe-tool {name}: not in tools/list")
+            continue
+        if args is None:
+            args = placeholder_args(by_name[name].get("inputSchema"))
+        rec = {"tool": name, "args": args, "why": why}
+        s = time.monotonic()
+        try:
+            rec["result"] = client.request("tools/call", {"name": name, "arguments": args})
+        except RpcError as e:
+            rec["error"] = e.error
+        except ProbeError as e:
+            rec["error"] = {"message": str(e)}
+            rec["ms"] = int((time.monotonic() - s) * 1000)
+            t["calls"].append(rec)
+            raise
+        rec["ms"] = int((time.monotonic() - s) * 1000)
+        t["calls"].append(rec)
+
+    try:
+        t["tools_after"] = _list_tools(client)
+    except (ProbeError, RpcError) as e:
+        t["errors"].append(f"second tools/list: {e}")
+
+
 def run_probe(cmd, env_allow=(), calls=DEFAULT_CALLS, timeout=DEFAULT_TIMEOUT,
               tool_specs=(), version="dev"):
-    """Run the full probe sequence. Returns the transcript dict; never raises for server
-    misbehavior (recorded under `errors` / `fatal`), only for bad caller input."""
+    """Run the full probe sequence over stdio. Returns the transcript dict; never raises for
+    server misbehavior (recorded under `errors` / `fatal`), only for bad caller input."""
     argv = split_command(cmd)
     specs = [parse_tool_spec(s) for s in tool_specs]
     work = tempfile.mkdtemp(prefix="ggs-probe-")
@@ -421,6 +498,7 @@ def run_probe(cmd, env_allow=(), calls=DEFAULT_CALLS, timeout=DEFAULT_TIMEOUT,
     os.makedirs(cwd)
     env = build_env(home, env_allow)
     t = {
+        "transport": "stdio",
         "cmd": cmd if isinstance(cmd, str) else " ".join(cmd),
         "argv": argv,
         "env_passthrough": sorted(k.split("=", 1)[0] for k in env_allow),
@@ -432,59 +510,7 @@ def run_probe(cmd, env_allow=(), calls=DEFAULT_CALLS, timeout=DEFAULT_TIMEOUT,
     client = StdioClient(argv, cwd, env, timeout)
     t0 = time.monotonic()
     try:
-        client.start()
-        init = client.request("initialize", {
-            "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": {},
-            "clientInfo": {"name": "git-gud-security-probe", "version": version},
-        })
-        if not isinstance(init, dict):
-            raise ProbeError("initialize: result is not an object")
-        t["serverInfo"] = init.get("serverInfo")
-        t["protocolVersion"] = init.get("protocolVersion")
-        t["capabilities"] = init.get("capabilities")
-        t["instructions"] = init.get("instructions")
-        client.notify("notifications/initialized")
-        t["tools"] = _list_tools(client)
-
-        plan = [(name, args, "explicit") for name, args in specs]
-        planned = {p[0] for p in plan}
-        auto = 0
-        if calls > 0:
-            for tool in t["tools"]:
-                if auto >= calls:
-                    break
-                name = tool.get("name")
-                if not isinstance(name, str) or name in planned or not is_read_only(tool):
-                    continue
-                plan.append((name, placeholder_args(tool.get("inputSchema")), "auto"))
-                planned.add(name)
-                auto += 1
-        by_name = {x.get("name"): x for x in t["tools"]}
-        for name, args, why in plan:
-            if name not in by_name:
-                t["errors"].append(f"--probe-tool {name}: not in tools/list")
-                continue
-            if args is None:
-                args = placeholder_args(by_name[name].get("inputSchema"))
-            rec = {"tool": name, "args": args, "why": why}
-            s = time.monotonic()
-            try:
-                rec["result"] = client.request("tools/call", {"name": name, "arguments": args})
-            except RpcError as e:
-                rec["error"] = e.error
-            except ProbeError as e:
-                rec["error"] = {"message": str(e)}
-                rec["ms"] = int((time.monotonic() - s) * 1000)
-                t["calls"].append(rec)
-                raise
-            rec["ms"] = int((time.monotonic() - s) * 1000)
-            t["calls"].append(rec)
-
-        try:
-            t["tools_after"] = _list_tools(client)
-        except (ProbeError, RpcError) as e:
-            t["errors"].append(f"second tools/list: {e}")
+        _run_sequence(client, t, calls, specs, version)
     except RpcError as e:
         t["errors"].append(f"server error: {json.dumps(e.error)[:300]}")
         t["fatal"] = str(e)
@@ -499,6 +525,65 @@ def run_probe(cmd, env_allow=(), calls=DEFAULT_CALLS, timeout=DEFAULT_TIMEOUT,
         t["server_messages"] = client.server_msgs
         t["duration_ms"] = int((time.monotonic() - t0) * 1000)
         shutil.rmtree(work, ignore_errors=True)
+    return t
+
+
+def run_probe_url(url, bearer=None, calls=DEFAULT_CALLS, timeout=DEFAULT_TIMEOUT,
+                  tool_specs=(), version="dev", token_file=None, open_url=None, log=None):
+    """Run the probe sequence against a remote Streamable HTTP endpoint. Auth: the given
+    bearer, else a cached/refreshed OAuth token, else the interactive OAuth flow (on a 401).
+    Nothing runs locally except this client."""
+    import probe_http  # local import: keeps stdio-only use free of the HTTP module
+    specs = [parse_tool_spec(s) for s in tool_specs]
+    token_file = token_file or probe_http.DEFAULT_TOKEN_FILE
+    t = {
+        "transport": "http",
+        "url": url,
+        "cmd": url,
+        "auth": "bearer-env" if bearer else "none",
+        "started": time.time(),
+        "tools": [],
+        "calls": [],
+        "errors": [],
+    }
+    client = probe_http.HttpClient(url, token=bearer, timeout=timeout)
+    t0 = time.monotonic()
+    statuses = []
+    try:
+        for attempt in range(3):
+            try:
+                _run_sequence(client, t, calls, specs, version)
+                break
+            except probe_http.AuthRequired as e:
+                statuses += client.http_statuses
+                if bearer:
+                    raise ProbeError("401 with the bearer from --bearer-env; the token is "
+                                     "invalid, expired, or not for this endpoint")
+                if attempt == 1:
+                    # A cached token that 401s: drop it and go through the flow once more.
+                    probe_http.forget_token(url, token_file)
+                if attempt >= 2:
+                    raise ProbeError("401 after re-authorizing; giving up")
+                token, how = probe_http.obtain_token(url, e.www_authenticate, token_file,
+                                                     open_url=open_url, timeout=timeout, log=log)
+                t["auth"] = how
+                t["tools"], t["calls"], t["errors"] = [], [], []
+                client = probe_http.HttpClient(url, token=token, timeout=timeout)
+    except RpcError as e:
+        t["errors"].append(f"server error: {json.dumps(e.error)[:300]}")
+        t["fatal"] = str(e)
+    except ProbeError as e:
+        t["errors"].append(str(e))
+        t["fatal"] = str(e)
+    finally:
+        client.close()
+        t["exit_code"] = None
+        t["http_statuses"] = statuses + client.http_statuses
+        t["session_id_seen"] = bool(client.session_id)
+        t["stderr_tail"] = ""
+        t["stdout_noise"] = client.noise[:20]
+        t["server_messages"] = client.server_msgs
+        t["duration_ms"] = int((time.monotonic() - t0) * 1000)
     return t
 
 
@@ -627,7 +712,8 @@ def analyze(t, patterns):
     directive = _pattern(patterns, "mcp-tool-result-model-directive")
     backdoor = _pattern(patterns, "prompt-injection-hidden-instructions-in-skill")
     invisible = _pattern(patterns, "invisible-unicode-in-instructions")
-    steer = [p for p in (directive, backdoor) if p]
+    extra = {"_any": _PROBE_EXTRA, "_not": []}
+    steer = [p for p in (directive, backdoor, extra) if p]
     out = []
     seen = set()
 
@@ -652,6 +738,15 @@ def analyze(t, patterns):
         if invisible:
             _scan_text(text, [invisible], path, "invisible-unicode-in-instructions", "high",
                        "Invisible / control character in text sent to the model", seen, out)
+        if kind == "result":
+            for n, line in enumerate(text.splitlines() or [text], 1):
+                m = _TRACKED_URL.search(line)
+                if m and ("tracked-url", path, n) not in seen:
+                    seen.add(("tracked-url", path, n))
+                    out.append(_finding(
+                        "mcp-tool-result-model-directive", "high",
+                        "Tracked marketing link (attribution / account ids) handed to the model",
+                        path, n, m.group(0)))
 
     # A side-channel key carrying prose is a medium on its own; if a directive regex already
     # fired on that same surface the high finding covers it, so do not report it twice.
@@ -735,7 +830,12 @@ def summary(t):
              for x in t.get("tools", [])]
     instr = t.get("instructions")
     return {
+        "transport": t.get("transport", "stdio"),
         "cmd": t.get("cmd"),
+        "url": t.get("url"),
+        "auth": t.get("auth"),
+        "http_statuses": t.get("http_statuses"),
+        "session_id_seen": t.get("session_id_seen"),
         "env_passthrough": t.get("env_passthrough", []),
         "serverInfo": t.get("serverInfo"),
         "protocolVersion": t.get("protocolVersion"),

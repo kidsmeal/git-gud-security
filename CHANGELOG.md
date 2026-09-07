@@ -4,6 +4,54 @@ All notable changes to Git Gud Security are recorded here. Versioning is
 [SemVer](https://semver.org/). Pre-1.0: behavior and check IDs may still change between
 minor versions.
 
+## [0.8.0] - 2026-09-07
+
+Live MCP probe, remote transport. 0.7.0 could only probe a server you can launch locally. The
+servers that upsell are hosted (`mcp.notion.com`), speak Streamable HTTP, and sit behind
+OAuth. This release probes those.
+
+### Added
+
+- **`scan.py --mcp-url <endpoint>`** (`scripts/probe_http.py`, stdlib only). Streamable HTTP
+  client: POST JSON-RPC, answers as JSON or `text/event-stream` (parsed as a stream, closed as
+  soon as the awaited response arrives), `Mcp-Session-Id` carried after initialize, `DELETE` on
+  close, server-initiated `ping`/`roots/list` answered over a fresh POST. Same probe sequence and
+  analysis as stdio (`probe._run_sequence` is now transport-agnostic).
+- **Auth**: `--bearer-env VAR` (a token from an env var, never argv); else the OAuth 2.1 flow the
+  MCP auth spec describes on a 401: resource metadata from `WWW-Authenticate` or the well-known
+  path, authorization-server metadata, dynamic client registration (public client, no secret),
+  authorization-code + PKCE S256 with a loopback redirect, `resource` indicator, token exchange.
+  The user approves in their own browser (`--oauth-print-url` prints the URL for headless use).
+  Tokens are cached in `--token-file` (default `~/.ggs/mcp-tokens.json`, 0600), refreshed when
+  expired, dropped and re-authorized once on a 401. No token ever reaches stdout, the report, or
+  the transcript.
+- **Report**: `url` + `auth` line, HTTP status trail, session yes/no, and a footer that says
+  nothing executed locally. `probe.transport` in the JSON summary.
+- **Refusals**: `--mcp-url` with `--mcp-cmd` (two transports), with `--url` (the gate), or with
+  `--probe-env` (a remote server gets no env).
+- **Rules learned from the first real target** (`mcp.notion.com`, free workspace). The 0.6.0
+  directive regexes missed two of its actual strings; `mcp-tool-result-model-directive` gains:
+  "learn how to access ... free trial/full version ... https://", "give the user ... destination
+  link / next step", "in the final response ... link", "as an optional Business next step",
+  "requires a ... plan or higher", and `source=...upsell` query params. Probe-only extras (noise
+  in source, damning in a transcript): `upsell`, "do not mention this", "never mention limits /
+  eligibility", "free trial ... https://". New probe check: a **tracked marketing link** in a
+  result (`utm_*`, `source=`, `click_source`, `upsell`, `opportunity`, account/space/user ids in
+  the query string) is a high under the same id; the ids leak the caller's identity into the
+  model's context alongside the ad.
+- **`references/probed-servers/`**: the publish-once answer to "there is no way to check a hosted
+  server without connecting". A redacted transcript summary per probed server, so the next
+  person reads what it says to the model instead of granting it OAuth to find out. First entry:
+  `notion-mcp.md`.
+
+### Tests
+
+- `tests/fixtures/probe-servers/http_server.py`: Streamable HTTP MCP + OAuth authorization
+  server on one origin (401 with `resource_metadata`, JSON initialize with session id, SSE tool
+  results, `/register`, `/authorize` that 302s straight back, `/token` that checks PKCE). The
+  test plays the browser. Covers bearer, wrong bearer fails fast without starting OAuth, the
+  full flow, cached-token reuse with no second authorize, and the CLI exclusions.
+
 ## [0.7.0] - 2026-09-07
 
 Live MCP probe, stdio transport. 0.6.0 added the check for tool results that carry

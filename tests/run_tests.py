@@ -14,6 +14,7 @@ shows up as a reviewable golden diff instead of being laundered through the test
 """
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -840,6 +841,7 @@ def test_probe_upsell():
         ("mcp-tool-result-model-directive", "mcp://tools/acme-search/result"),
         ("mcp-tool-result-model-directive", "mcp://tools/acme-search/result/_meta.followUp"),
         ("mcp-tool-result-model-directive", "mcp://tools/acme-env/result/notice"),
+        ("mcp-tool-result-model-directive", "mcp://tools/acme-premium-search/result"),
         ("mcp-rug-pull-tool-redefinition", "mcp://tools/list#2"),
     }
     problems = []
@@ -854,8 +856,11 @@ def test_probe_upsell():
     if per_file.get("mcp://tools/acme-env/result/notice") != ["medium"]:
         problems.append("side-channel `notice` key not reported as a single medium")
     called = {c["tool"] for c in t["calls"]}
-    if called != {"acme-search", "acme-env"}:
-        problems.append(f"called {sorted(called)}, wanted the two read-only tools only")
+    if called != {"acme-search", "acme-env", "acme-premium-search"}:
+        problems.append(f"called {sorted(called)}, wanted the three read-only tools only")
+    titles = {x["title"] for x in f if x["file"] == "mcp://tools/acme-premium-search/result"}
+    if not any("Tracked marketing link" in s for s in titles):
+        problems.append("tracked upsell link in the plan-gated result not flagged")
     if t.get("fatal") or t.get("exit_code") is None:
         problems.append(f"fatal={t.get('fatal')} exit={t.get('exit_code')}")
     if any(x.get("engine") != "probe" for x in f):
@@ -971,6 +976,110 @@ def test_probe_cli():
         print("  PASS: probe report + json summary + gate/probe exclusion")
 
 
+def _start_http_fixture():
+    """Launch the Streamable HTTP + OAuth fixture; returns (proc, base_url)."""
+    p = subprocess.Popen([sys.executable, os.path.join(PROBE_FIXTURES, "http_server.py")],
+                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    line = p.stdout.readline().strip()
+    if not line.startswith("PORT "):
+        p.kill()
+        raise RuntimeError(f"http fixture did not start: {line!r}")
+    return p, f"http://127.0.0.1:{line.split()[1]}"
+
+
+def _http_counts(base):
+    import urllib.request
+    with urllib.request.urlopen(base + "/counts", timeout=5) as r:
+        return json.loads(r.read())
+
+
+def test_probe_http():
+    """Streamable HTTP transport end to end against the fixture: bearer auth via env, JSON
+    and SSE answers, Mcp-Session-Id carried, directive in instructions + SSE result flagged.
+    Then the OAuth flow: 401 -> discovery -> registration -> PKCE authorize (the test plays
+    the browser) -> token -> cached token reused with no second authorize."""
+    global failed
+    print("\n--- probe: Streamable HTTP + OAuth (fixture) ---")
+    import tempfile, urllib.request
+    patterns, _ = scan.load_patterns()
+    proc, base = _start_http_fixture()
+    problems = []
+    try:
+        url = base + "/mcp"
+        # 1. bearer from the caller
+        t = probe.run_probe_url(url, bearer="fixture-token", calls=5, timeout=10)
+        f = probe.analyze(t, patterns)
+        got = {(x["id"], x["file"]) for x in f}
+        want = {("mcp-tool-result-model-directive", "mcp://initialize/instructions"),
+                ("mcp-tool-result-model-directive", "mcp://tools/acme-search/result")}
+        if t.get("fatal") or not want <= got:
+            problems.append(f"bearer run: fatal={t.get('fatal')} got={sorted(got)}")
+        if not t.get("session_id_seen") or t.get("auth") != "bearer-env":
+            problems.append("session id not carried or auth not recorded")
+        # 2. a wrong bearer must fail fast, not start OAuth
+        t = probe.run_probe_url(url, bearer="wrong", calls=5, timeout=10)
+        if "401" not in (t.get("fatal") or ""):
+            problems.append(f"wrong bearer did not fail with 401: {t.get('fatal')!r}")
+        # 3. OAuth: the test is the browser: fetch the consent URL, follow the 302 to loopback
+        tok_dir = tempfile.mkdtemp(prefix="ggs-tok-")
+        token_file = os.path.join(tok_dir, "tokens.json")
+
+        def browser(u):
+            import threading
+            threading.Thread(target=lambda: urllib.request.urlopen(u, timeout=10).read(),
+                             daemon=True).start()
+        before = _http_counts(base)
+        t = probe.run_probe_url(url, calls=5, timeout=10, token_file=token_file,
+                                open_url=browser, log=lambda s: None)
+        after = _http_counts(base)
+        if t.get("fatal") or t.get("auth") != "oauth":
+            problems.append(f"oauth run: fatal={t.get('fatal')} auth={t.get('auth')}")
+        if after["authorize"] - before["authorize"] != 1 or after["token"] - before["token"] != 1:
+            problems.append(f"oauth endpoints hit unexpectedly: {before} -> {after}")
+        if not os.path.exists(token_file):
+            problems.append("token file not written")
+        else:
+            with open(token_file, encoding="utf-8") as fh:
+                if "fixture-token" not in fh.read():
+                    problems.append("token file missing the access token")
+        f = probe.analyze(t, patterns)
+        if not want <= {(x["id"], x["file"]) for x in f}:
+            problems.append("oauth run: directive findings missing")
+        # 4. cached token: no new authorize
+        t = probe.run_probe_url(url, calls=5, timeout=10, token_file=token_file,
+                                open_url=lambda u: problems.append("browser opened on cached run"),
+                                log=lambda s: None)
+        again = _http_counts(base)
+        if t.get("auth") != "oauth-cached" or again["authorize"] != after["authorize"]:
+            problems.append(f"cached token not reused: auth={t.get('auth')} counts={again}")
+        # 5. CLI: --mcp-url with --bearer-env; exclusions
+        env = dict(os.environ, GGS_TEST_BEARER="fixture-token")
+        r = subprocess.run([sys.executable, SCAN_PY, "--mcp-url", url, "--bearer-env",
+                            "GGS_TEST_BEARER"], capture_output=True, text=True,
+                           encoding="utf-8", env=env)
+        if r.returncode != 0 or "DO NOT INSTALL" not in r.stdout or "auth: bearer-env" not in r.stdout:
+            problems.append(f"cli: rc={r.returncode} stderr={r.stderr.strip()[-200:]}")
+        if "nothing executed locally" not in r.stdout:
+            problems.append("cli: remote footer missing")
+        bad = subprocess.run([sys.executable, SCAN_PY, "--mcp-url", url, "--mcp-cmd", "x"],
+                             capture_output=True, text=True, encoding="utf-8")
+        if bad.returncode != 2 or "pick one" not in bad.stderr:
+            problems.append("--mcp-url + --mcp-cmd not refused")
+        bad = subprocess.run([sys.executable, SCAN_PY, "--mcp-url", url, "--probe-env", "X"],
+                             capture_output=True, text=True, encoding="utf-8")
+        if bad.returncode != 2:
+            problems.append("--mcp-url + --probe-env not refused")
+        shutil.rmtree(tok_dir, ignore_errors=True)
+    finally:
+        proc.kill()
+        proc.wait(timeout=5)
+    if problems:
+        failed = True
+        print("  FAIL: " + "; ".join(problems))
+    else:
+        print("  PASS: bearer + session + SSE, wrong bearer fails fast, OAuth flow + cache, CLI")
+
+
 if __name__ == "__main__":
     if UPDATE:
         # Only regenerate the goldens; skip assertions.
@@ -1009,6 +1118,7 @@ if __name__ == "__main__":
     test_probe_env_isolation()
     test_probe_timeout()
     test_probe_cli()
+    test_probe_http()
     test_findings_exact("quick")
     test_findings_exact("readme")
     test_false_positives("quick")

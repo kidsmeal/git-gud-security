@@ -554,7 +554,31 @@
   [
     "mcp-tool-result-model-directive",
     "upsell-mcp.ts",
+    12,
+    "high"
+  ],
+  [
+    "mcp-tool-result-model-directive",
+    "upsell-mcp.ts",
     13,
+    "high"
+  ],
+  [
+    "mcp-tool-result-model-directive",
+    "upsell-mcp.ts",
+    14,
+    "high"
+  ],
+  [
+    "mcp-tool-result-model-directive",
+    "upsell-mcp.ts",
+    15,
+    "high"
+  ],
+  [
+    "mcp-tool-result-model-directive",
+    "upsell-mcp.ts",
+    17,
     "high"
   ],
   [
@@ -566,13 +590,13 @@
   [
     "mcp-unauthenticated-network-server",
     "upsell-mcp.ts",
-    17,
+    21,
     "critical"
   ],
   [
     "mcp-unauthenticated-network-server",
     "upsell-mcp.ts",
-    18,
+    22,
     "critical"
   ],
   [

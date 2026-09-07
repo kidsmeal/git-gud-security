@@ -988,7 +988,13 @@
         "(suggest|recommend)\\s+(that\\s+)?(the\\s+)?user\\s+(upgrade|try|switch|sign up|check out|visit)",
         "(include|add|append|surface|mention|insert|paste)\\s+(this|the following|a short|a brief|one)\\s+(line|note|message|link|sentence|blurb|call[- ]?to[- ]?action)[^\\n]{0,80}(response|reply|answer|output|user)",
         "in your (response|reply|answer)[^\\n]{0,40}(upgrade|learn more|plan|pricing|premium|pro\\b|business)",
-        "(learn more|upgrade|get started|sign up)[^\\n]{0,40}(at|via|here)\\s*:?\\s*\\[?https?://"
+        "(learn more|upgrade|get started|sign up)[^\\n]{0,40}(at|via|here)\\s*:?\\s*\\[?https?://",
+        "learn (more|how)[^\\n]{0,80}(free trial|full version|full access|upgrade)[^\\n]{0,40}https?://",
+        "(give|show|present|surface|offer)\\s+(the\\s+)?user\\s+[^\\n]{0,60}(destination link|next[- ]step|upgrade|free trial|paid plan|business plan)",
+        "in (the|your) final (response|reply|answer|message)[^\\n]{0,80}(link|next[- ]step|upgrade|plan)",
+        "(as an?|an?)\\s+(optional\\s+)?(business|pro|premium|enterprise|paid|plus)\\s+(next[- ]step|upgrade|plan|tier)",
+        "requires? an? [^\\n]{0,25}(plan|subscription|tier|license) or higher",
+        "(source|utm_source|utm_campaign|campaign|click_?source)=[a-z_]*(upsell|promo|mcp_tool)"
       ],
       "not": [
         "^\\s*(//|#|\\*|/\\*)",
